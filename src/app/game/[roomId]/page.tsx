@@ -106,7 +106,7 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
     };
 
     initSocket();
-  }, [params, playerId]);
+  }, [params, playerId, fetchRoom]);
 
   const handleMove = async (column: number) => {
     if (!room || !isCurrentPlayer) return;

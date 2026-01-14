@@ -2,10 +2,7 @@ import { GameRoom } from "@/types/game";
 import { GameLogic } from "./gameLogic";
 import { kv } from "@vercel/kv";
 
-// Declare global io type for TypeScript
-declare global {
-  var io: any;
-}
+// Access global io instance
 
 const USE_KV = process.env.KV_REST_API_URL ? true : false;
 
@@ -17,8 +14,8 @@ export class GameRoomManager {
   private memoryRooms: Map<string, GameRoom> = new Map();
 
   private emitToRoom(roomId: string, event: string, data: any) {
-    if (global.io) {
-      global.io.to(roomId).emit(event, data);
+    if ((globalThis as any).io) {
+      (globalThis as any).io.to(roomId).emit(event, data);
     }
   }
 
