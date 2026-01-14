@@ -7,7 +7,7 @@ import Board from "@/components/Board";
 import PlayerList from "@/components/PlayerList";
 import GameInfo from "@/components/GameInfo";
 
-const POLL_INTERVAL = 2000; // Poll every 2 seconds for updates (Vercel-optimized)
+const POLL_INTERVAL = 3000; // Poll every 3 seconds for updates (reduced from 2s to avoid rate limits)
 
 export default function GamePage({ params }: { params: Promise<{ roomId: string }> }) {
   const [room, setRoom] = useState<GameRoom | null>(null);

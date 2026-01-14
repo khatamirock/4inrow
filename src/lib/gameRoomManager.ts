@@ -67,15 +67,7 @@ export class GameRoomManager {
   async getRoom(roomId: string): Promise<GameRoom | null> {
     if (USE_KV) {
       const roomData = await kv.get(`room:${roomId}`);
-      if (!roomData) return null;
-      
-      const room = JSON.parse(roomData as string);
-      
-      // Renew the TTL on access - keep active games alive longer
-      const expiry = room.status === 'playing' || room.status === 'waiting' ? ACTIVE_ROOM_EXPIRY : ROOM_EXPIRY;
-      await kv.setex(`room:${roomId}`, expiry, JSON.stringify(room));
-      
-      return room;
+      return roomData ? JSON.parse(roomData as string) : null;
     } else {
       return this.memoryRooms.get(roomId) || null;
     }
@@ -83,9 +75,11 @@ export class GameRoomManager {
 
   private async saveRoom(room: GameRoom): Promise<void> {
     if (USE_KV) {
-      // Keep active games alive longer
-      const expiry = room.status === 'playing' || room.status === 'waiting' ? ACTIVE_ROOM_EXPIRY : ROOM_EXPIRY;
+      // Refresh TTL only on writes - much longer for stability
+      // Use consistent 30-day expiry for all states to ensure room never expires mid-game
+      const expiry = 2592000; // 30 days
       await kv.setex(`room:${room.id}`, expiry, JSON.stringify(room));
+      await kv.setex(`roomkey:${room.roomKey}`, expiry, room.id);
     } else {
       this.memoryRooms.set(room.id, room);
     }
