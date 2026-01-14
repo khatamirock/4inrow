@@ -40,6 +40,10 @@ export class GameRoomManager {
       createdAt: new Date(),
     };
 
+    // Always add to in-memory cache immediately
+    activeRoomsCache.set(room.id, { room, lastSaved: Date.now() });
+
+    // Also save to KV for persistence
     if (USE_KV) {
       const expiry = 2592000; // 30 days
       await kv.setex(`room:${room.id}`, expiry, JSON.stringify(room));
@@ -47,6 +51,9 @@ export class GameRoomManager {
     } else {
       this.memoryRooms.set(room.id, room);
     }
+
+    return room;
+  }
 
     return room;
   }
