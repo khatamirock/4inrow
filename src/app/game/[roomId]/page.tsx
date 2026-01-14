@@ -13,7 +13,17 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
   const [room, setRoom] = useState<GameRoom | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [playerId] = useState(() => `player_${Math.random().toString(36).substring(7)}`);
+  const [playerId] = useState(() => {
+    if (typeof window !== 'undefined') {
+      let id = localStorage.getItem('playerId');
+      if (!id) {
+        id = `player_${Math.random().toString(36).substring(7)}`;
+        localStorage.setItem('playerId', id);
+      }
+      return id;
+    }
+    return `player_${Math.random().toString(36).substring(7)}`;
+  });
   const [isCurrentPlayer, setIsCurrentPlayer] = useState(false);
 
   // Fetch room data

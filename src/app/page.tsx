@@ -5,7 +5,17 @@ import axios from "axios";
 import { useRouter } from "next/navigation";
 
 export default function Home() {
-  const [playerId] = useState(() => `player_${Math.random().toString(36).substring(7)}`);
+  const [playerId] = useState(() => {
+    if (typeof window !== 'undefined') {
+      let id = localStorage.getItem('playerId');
+      if (!id) {
+        id = `player_${Math.random().toString(36).substring(7)}`;
+        localStorage.setItem('playerId', id);
+      }
+      return id;
+    }
+    return `player_${Math.random().toString(36).substring(7)}`;
+  });
   const [playerName, setPlayerName] = useState("");
   const [roomKey, setRoomKey] = useState("");
   const [isCreating, setIsCreating] = useState(false);
