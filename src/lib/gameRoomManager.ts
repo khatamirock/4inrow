@@ -55,9 +55,6 @@ export class GameRoomManager {
     return room;
   }
 
-    return room;
-  }
-
   async getRoomByKey(roomKey: string): Promise<GameRoom | null> {
     if (USE_KV) {
       const roomId = (await kv.get(`roomkey:${roomKey}`)) as string | null;
