@@ -50,62 +50,73 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
     }
   }, [params, playerId]);
 
-  // Socket connection effect
+  // Real-time connection effect (WebSocket for dev, polling for production)
   useEffect(() => {
-    const initSocket = async () => {
-      try {
-        const resolvedParams = await params;
-        const socketInstance = io();
+    const isProduction = process.env.NODE_ENV === 'production' || typeof window !== 'undefined' && window.location.hostname !== 'localhost';
 
-        socketInstance.on('connect', () => {
-          console.log('Connected to server');
-          socketInstance.emit('join-room', resolvedParams.roomId);
-        });
+    if (isProduction) {
+      // Production: Use polling (Vercel doesn't support WebSocket)
+      console.log('Using polling for real-time updates (production environment)');
+      fetchRoom();
+      const interval = setInterval(fetchRoom, POLL_INTERVAL);
+      return () => clearInterval(interval);
+    } else {
+      // Development: Use WebSocket
+      const initSocket = async () => {
+        try {
+          const resolvedParams = await params;
+          const socketInstance = io();
 
-        socketInstance.on('room-joined', () => {
-          console.log('Joined room successfully');
-          fetchRoom(); // Initial room fetch
-        });
+          socketInstance.on('connect', () => {
+            console.log('Connected to server via WebSocket');
+            socketInstance.emit('join-room', resolvedParams.roomId);
+          });
 
-        socketInstance.on('room-updated', (data) => {
-          console.log('Room updated:', data);
-          setRoom(data.room);
+          socketInstance.on('room-joined', () => {
+            console.log('Joined room successfully');
+            fetchRoom(); // Initial room fetch
+          });
 
-          // Update current player status
-          const currentRoom = data.room;
-          const playerInRoom = currentRoom.players.find(
-            (p: any) => p.id === playerId
-          );
-          if (playerInRoom) {
-            setIsCurrentPlayer(playerInRoom.playerNumber === currentRoom.currentPlayer);
-          }
-        });
+          socketInstance.on('room-updated', (data) => {
+            console.log('Room updated via WebSocket:', data);
+            setRoom(data.room);
 
-        socketInstance.on('game-finished', (data) => {
-          console.log('Game finished:', data);
-          setRoom(data.room);
-          setIsCurrentPlayer(false); // Game is over
-        });
+            // Update current player status
+            const currentRoom = data.room;
+            const playerInRoom = currentRoom.players.find(
+              (p: any) => p.id === playerId
+            );
+            if (playerInRoom) {
+              setIsCurrentPlayer(playerInRoom.playerNumber === currentRoom.currentPlayer);
+            }
+          });
 
-        socketInstance.on('disconnect', () => {
-          console.log('Disconnected from server');
-        });
+          socketInstance.on('game-finished', (data) => {
+            console.log('Game finished via WebSocket:', data);
+            setRoom(data.room);
+            setIsCurrentPlayer(false); // Game is over
+          });
 
-        setSocket(socketInstance);
+          socketInstance.on('disconnect', () => {
+            console.log('Disconnected from WebSocket server');
+          });
 
-        return () => {
-          socketInstance.disconnect();
-        };
-      } catch (error) {
-        console.error('Failed to connect to socket:', error);
-        // Fallback to polling if socket fails
-        fetchRoom();
-        const interval = setInterval(fetchRoom, POLL_INTERVAL);
-        return () => clearInterval(interval);
-      }
-    };
+          setSocket(socketInstance);
 
-    initSocket();
+          return () => {
+            socketInstance.disconnect();
+          };
+        } catch (error) {
+          console.error('Failed to connect to WebSocket:', error);
+          // Fallback to polling if socket fails
+          fetchRoom();
+          const interval = setInterval(fetchRoom, POLL_INTERVAL);
+          return () => clearInterval(interval);
+        }
+      };
+
+      initSocket();
+    }
   }, [params, playerId, fetchRoom]);
 
   const handleMove = async (column: number) => {
@@ -113,9 +124,10 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
 
     try {
       const resolvedParams = await params;
+      const isProduction = process.env.NODE_ENV === 'production' || typeof window !== 'undefined' && window.location.hostname !== 'localhost';
 
-      // Emit move attempt via socket for real-time feedback
-      if (socket) {
+      // Emit move attempt via socket for real-time feedback (only in development)
+      if (socket && !isProduction) {
         socket.emit('make-move', {
           roomId: resolvedParams.roomId,
           playerId,
@@ -130,7 +142,11 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
         column,
       });
 
-      // Room will be updated via socket events, but we can use response for immediate feedback
+      // In production, manually update the room state from the response
+      if (isProduction && response.data.success) {
+        setRoom(response.data.room);
+      }
+
       if (response.data.success) {
         setError(""); // Clear any previous errors
       }
@@ -142,9 +158,10 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
   const handleReset = async () => {
     try {
       const resolvedParams = await params;
+      const isProduction = process.env.NODE_ENV === 'production' || typeof window !== 'undefined' && window.location.hostname !== 'localhost';
 
-      // Emit reset via socket for real-time feedback
-      if (socket) {
+      // Emit reset via socket for real-time feedback (only in development)
+      if (socket && !isProduction) {
         socket.emit('reset-game', {
           roomId: resolvedParams.roomId,
         });
@@ -155,7 +172,11 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
         roomId: resolvedParams.roomId,
       });
 
-      // Room will be updated via socket events
+      // In production, manually update the room state from the response
+      if (isProduction && response.data.success) {
+        setRoom(response.data.room);
+      }
+
       if (response.data.success) {
         setError("");
       }
