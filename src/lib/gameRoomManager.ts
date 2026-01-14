@@ -20,7 +20,7 @@ export class GameRoomManager {
   }
 
   generateRoomKey(): string {
-    return Math.random().toString(36).substring(2, 8).toUpperCase();
+    return Math.floor(1000 + Math.random() * 9000).toString(); // 4-digit number (1000-9999)
   }
 
   generateRoomId(): string {
