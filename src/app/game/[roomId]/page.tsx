@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
+import { io, Socket } from "socket.io-client";
 import { GameRoom } from "@/types/game";
 import Board from "@/components/Board";
 import PlayerList from "@/components/PlayerList";
@@ -13,6 +14,7 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
   const [room, setRoom] = useState<GameRoom | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [socket, setSocket] = useState<Socket | null>(null);
   const [playerId] = useState(() => {
     if (typeof window !== 'undefined') {
       let id = localStorage.getItem('playerId');
@@ -48,28 +50,90 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
     }
   }, [params, playerId]);
 
-  // Polling effect - optimized for Vercel
+  // Socket connection effect
   useEffect(() => {
-    fetchRoom();
+    const initSocket = async () => {
+      try {
+        const resolvedParams = await params;
+        const socketInstance = io();
 
-    // Always poll to keep the room alive in KV storage
-    // Games can be reset after finishing, so we need to keep polling
-    const interval = setInterval(fetchRoom, POLL_INTERVAL);
-    return () => clearInterval(interval);
-  }, [fetchRoom]);
+        socketInstance.on('connect', () => {
+          console.log('Connected to server');
+          socketInstance.emit('join-room', resolvedParams.roomId);
+        });
+
+        socketInstance.on('room-joined', () => {
+          console.log('Joined room successfully');
+          fetchRoom(); // Initial room fetch
+        });
+
+        socketInstance.on('room-updated', (data) => {
+          console.log('Room updated:', data);
+          setRoom(data.room);
+
+          // Update current player status
+          const currentRoom = data.room;
+          const playerInRoom = currentRoom.players.find(
+            (p: any) => p.id === playerId
+          );
+          if (playerInRoom) {
+            setIsCurrentPlayer(playerInRoom.playerNumber === currentRoom.currentPlayer);
+          }
+        });
+
+        socketInstance.on('game-finished', (data) => {
+          console.log('Game finished:', data);
+          setRoom(data.room);
+          setIsCurrentPlayer(false); // Game is over
+        });
+
+        socketInstance.on('disconnect', () => {
+          console.log('Disconnected from server');
+        });
+
+        setSocket(socketInstance);
+
+        return () => {
+          socketInstance.disconnect();
+        };
+      } catch (error) {
+        console.error('Failed to connect to socket:', error);
+        // Fallback to polling if socket fails
+        fetchRoom();
+        const interval = setInterval(fetchRoom, POLL_INTERVAL);
+        return () => clearInterval(interval);
+      }
+    };
+
+    initSocket();
+  }, [params, playerId]);
 
   const handleMove = async (column: number) => {
     if (!room || !isCurrentPlayer) return;
 
     try {
       const resolvedParams = await params;
+
+      // Emit move attempt via socket for real-time feedback
+      if (socket) {
+        socket.emit('make-move', {
+          roomId: resolvedParams.roomId,
+          playerId,
+          column,
+        });
+      }
+
+      // Make HTTP request to process the move on server
       const response = await axios.post("/api/games/move", {
         roomId: resolvedParams.roomId,
         playerId,
         column,
       });
 
-      setRoom(response.data.room);
+      // Room will be updated via socket events, but we can use response for immediate feedback
+      if (response.data.success) {
+        setError(""); // Clear any previous errors
+      }
     } catch (err: any) {
       setError(err.response?.data?.error || "Failed to make move");
     }
@@ -78,12 +142,23 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
   const handleReset = async () => {
     try {
       const resolvedParams = await params;
+
+      // Emit reset via socket for real-time feedback
+      if (socket) {
+        socket.emit('reset-game', {
+          roomId: resolvedParams.roomId,
+        });
+      }
+
+      // Make HTTP request to reset the game on server
       const response = await axios.post("/api/games/reset", {
         roomId: resolvedParams.roomId,
       });
 
-      setRoom(response.data.room);
-      setError("");
+      // Room will be updated via socket events
+      if (response.data.success) {
+        setError("");
+      }
     } catch (err: any) {
       setError("Failed to reset game");
     }

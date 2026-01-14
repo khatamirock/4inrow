@@ -2,6 +2,11 @@ import { GameRoom } from "@/types/game";
 import { GameLogic } from "./gameLogic";
 import { kv } from "@vercel/kv";
 
+// Declare global io type for TypeScript
+declare global {
+  var io: any;
+}
+
 const USE_KV = process.env.KV_REST_API_URL ? true : false;
 
 // In-memory cache for active games (shared across all requests to this server instance)
@@ -10,6 +15,12 @@ const CACHE_SAVE_INTERVAL = 30000; // Save to KV every 30 seconds if room has ch
 
 export class GameRoomManager {
   private memoryRooms: Map<string, GameRoom> = new Map();
+
+  private emitToRoom(roomId: string, event: string, data: any) {
+    if (global.io) {
+      global.io.to(roomId).emit(event, data);
+    }
+  }
 
   generateRoomKey(): string {
     return Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -144,6 +155,10 @@ export class GameRoomManager {
     }
 
     await this.saveRoom(room);
+
+    // Emit room update to all players in the room
+    this.emitToRoom(roomId, 'room-updated', { room });
+
     return { success: true, message: "Joined as player", room };
   }
 
@@ -205,6 +220,13 @@ export class GameRoomManager {
         room.winner = player.playerNumber;
         room.status = "finished";
         await this.saveRoom(room);
+
+        // Emit game finished event
+        this.emitToRoom(roomId, 'game-finished', {
+          winner: player.playerNumber,
+          room
+        });
+
         return {
           success: true,
           message: `Player ${player.playerNumber} wins!`,
@@ -217,6 +239,13 @@ export class GameRoomManager {
       room.status = "finished";
       room.winner = 0;
       await this.saveRoom(room);
+
+      // Emit game finished event (draw)
+      this.emitToRoom(roomId, 'game-finished', {
+        winner: 0,
+        room
+      });
+
       return { success: true, message: "Draw!", room };
     }
 
@@ -224,6 +253,10 @@ export class GameRoomManager {
     room.currentPlayer = nextPlayer;
 
     await this.saveRoom(room);
+
+    // Emit room update to all players in the room
+    this.emitToRoom(roomId, 'room-updated', { room });
+
     return { success: true, message: "Move made", room };
   }
 
@@ -241,6 +274,10 @@ export class GameRoomManager {
     room.winner = null;
 
     await this.saveRoom(room);
+
+    // Emit room update to all players in the room
+    this.emitToRoom(roomId, 'room-updated', { room });
+
     return { success: true, room };
   }
 
