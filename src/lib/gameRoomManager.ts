@@ -37,8 +37,9 @@ export class GameRoomManager {
     };
 
     if (USE_KV) {
-      await kv.setex(`room:${room.id}`, ROOM_EXPIRY, JSON.stringify(room));
-      await kv.setex(`roomkey:${room.roomKey}`, ROOM_EXPIRY, room.id);
+      const expiry = 2592000; // 30 days
+      await kv.setex(`room:${room.id}`, expiry, JSON.stringify(room));
+      await kv.setex(`roomkey:${room.roomKey}`, expiry, room.id);
     } else {
       this.memoryRooms.set(room.id, room);
     }
