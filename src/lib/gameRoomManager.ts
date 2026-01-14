@@ -4,6 +4,7 @@ import { kv } from "@vercel/kv";
 
 const USE_KV = process.env.KV_REST_API_URL ? true : false;
 const ROOM_EXPIRY = 86400; // 24 hours
+const ACTIVE_ROOM_EXPIRY = 604800; // 7 days for active games
 
 export class GameRoomManager {
   private memoryRooms: Map<string, GameRoom> = new Map();
@@ -66,7 +67,15 @@ export class GameRoomManager {
   async getRoom(roomId: string): Promise<GameRoom | null> {
     if (USE_KV) {
       const roomData = await kv.get(`room:${roomId}`);
-      return roomData ? JSON.parse(roomData as string) : null;
+      if (!roomData) return null;
+      
+      const room = JSON.parse(roomData as string);
+      
+      // Renew the TTL on access - keep active games alive longer
+      const expiry = room.status === 'playing' || room.status === 'waiting' ? ACTIVE_ROOM_EXPIRY : ROOM_EXPIRY;
+      await kv.setex(`room:${roomId}`, expiry, JSON.stringify(room));
+      
+      return room;
     } else {
       return this.memoryRooms.get(roomId) || null;
     }
@@ -74,7 +83,9 @@ export class GameRoomManager {
 
   private async saveRoom(room: GameRoom): Promise<void> {
     if (USE_KV) {
-      await kv.setex(`room:${room.id}`, ROOM_EXPIRY, JSON.stringify(room));
+      // Keep active games alive longer
+      const expiry = room.status === 'playing' || room.status === 'waiting' ? ACTIVE_ROOM_EXPIRY : ROOM_EXPIRY;
+      await kv.setex(`room:${room.id}`, expiry, JSON.stringify(room));
     } else {
       this.memoryRooms.set(room.id, room);
     }
