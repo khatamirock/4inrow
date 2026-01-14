@@ -3,8 +3,8 @@ import { GameLogic } from "./gameLogic";
 import { kv } from "@vercel/kv";
 
 const USE_KV = process.env.KV_REST_API_URL ? true : false;
-const ROOM_EXPIRY = 86400; // 24 hours
-const ACTIVE_ROOM_EXPIRY = 604800; // 7 days for active games
+const ROOM_EXPIRY = 604800; // 7 days for finished games
+const ACTIVE_ROOM_EXPIRY = 1209600; // 14 days for active games
 
 export class GameRoomManager {
   private memoryRooms: Map<string, GameRoom> = new Map();

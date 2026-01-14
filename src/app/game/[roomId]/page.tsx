@@ -52,14 +52,11 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
   useEffect(() => {
     fetchRoom();
 
-    // Only poll if game is active and user is participating
-    const shouldPoll = room?.status === 'playing' || room?.status === 'waiting';
-
-    if (shouldPoll) {
-      const interval = setInterval(fetchRoom, POLL_INTERVAL);
-      return () => clearInterval(interval);
-    }
-  }, [fetchRoom, room?.status]);
+    // Always poll to keep the room alive in KV storage
+    // Games can be reset after finishing, so we need to keep polling
+    const interval = setInterval(fetchRoom, POLL_INTERVAL);
+    return () => clearInterval(interval);
+  }, [fetchRoom]);
 
   const handleMove = async (column: number) => {
     if (!room || !isCurrentPlayer) return;
