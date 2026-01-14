@@ -8,7 +8,8 @@ import Board from "@/components/Board";
 import PlayerList from "@/components/PlayerList";
 import GameInfo from "@/components/GameInfo";
 
-const POLL_INTERVAL = 5000; // Poll every 5 seconds (reduced from 3s - in-memory cache is fast)
+const POLL_INTERVAL_FAST = 1000; // Poll every 1 second when it's your turn
+const POLL_INTERVAL_NORMAL = 2000; // Poll every 2 seconds normally
 
 export default function GamePage({ params }: { params: Promise<{ roomId: string }> }) {
   const [room, setRoom] = useState<GameRoom | null>(null);
@@ -33,17 +34,23 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
     try {
       const resolvedParams = await params;
       const response = await axios.get(`/api/rooms/${resolvedParams.roomId}`);
-      setRoom(response.data.room);
-      setLoading(false);
+      const newRoom = response.data.room;
 
-      // Check if this player is the current player
-      const currentRoom = response.data.room;
-      const playerInRoom = currentRoom.players.find(
-        (p: any) => p.id === playerId
-      );
-      if (playerInRoom) {
-        setIsCurrentPlayer(playerInRoom.playerNumber === currentRoom.currentPlayer);
-      }
+      // Only update state if room data actually changed
+      setRoom(prevRoom => {
+        if (!prevRoom || JSON.stringify(prevRoom) !== JSON.stringify(newRoom)) {
+          // Check if this player is the current player
+          const playerInRoom = newRoom.players.find(
+            (p: any) => p.id === playerId
+          );
+          if (playerInRoom) {
+            setIsCurrentPlayer(playerInRoom.playerNumber === newRoom.currentPlayer);
+          }
+          setLoading(false);
+          return newRoom;
+        }
+        return prevRoom;
+      });
     } catch (err: any) {
       setError("Failed to load room");
       setLoading(false);
@@ -58,8 +65,23 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
       // Production: Use polling (Vercel doesn't support WebSocket)
       console.log('Using polling for real-time updates (production environment)');
       fetchRoom();
-      const interval = setInterval(fetchRoom, POLL_INTERVAL);
-      return () => clearInterval(interval);
+
+      let intervalId: NodeJS.Timeout;
+
+      const scheduleNextPoll = () => {
+        // Use faster polling when it's your turn, normal speed otherwise
+        const pollInterval = isCurrentPlayer ? POLL_INTERVAL_FAST : POLL_INTERVAL_NORMAL;
+        intervalId = setTimeout(() => {
+          fetchRoom();
+          scheduleNextPoll(); // Schedule next poll
+        }, pollInterval);
+      };
+
+      scheduleNextPoll(); // Start the polling cycle
+
+      return () => {
+        if (intervalId) clearTimeout(intervalId);
+      };
     } else {
       // Development: Use WebSocket
       const initSocket = async () => {
@@ -110,14 +132,26 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
           console.error('Failed to connect to WebSocket:', error);
           // Fallback to polling if socket fails
           fetchRoom();
-          const interval = setInterval(fetchRoom, POLL_INTERVAL);
-          return () => clearInterval(interval);
+
+          let intervalId: NodeJS.Timeout;
+          const scheduleNextPoll = () => {
+            const pollInterval = isCurrentPlayer ? POLL_INTERVAL_FAST : POLL_INTERVAL_NORMAL;
+            intervalId = setTimeout(() => {
+              fetchRoom();
+              scheduleNextPoll();
+            }, pollInterval);
+          };
+          scheduleNextPoll();
+
+          return () => {
+            if (intervalId) clearTimeout(intervalId);
+          };
         }
       };
 
       initSocket();
     }
-  }, [params, playerId, fetchRoom]);
+  }, [params, playerId, fetchRoom, isCurrentPlayer]);
 
   const handleMove = async (column: number) => {
     if (!room || !isCurrentPlayer) return;
