@@ -6,7 +6,7 @@ export async function GET(
   { params }: { params: { roomId: string } }
 ) {
   try {
-    const room = gameRoomManager.getRoom(params.roomId);
+    const room = await gameRoomManager.getRoom(params.roomId);
     if (!room) {
       return NextResponse.json({ error: "Room not found" }, { status: 404 });
     }
@@ -16,6 +16,7 @@ export async function GET(
       room,
     });
   } catch (error) {
+    console.error(error);
     return NextResponse.json(
       { error: "Failed to get room" },
       { status: 500 }

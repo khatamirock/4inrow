@@ -12,13 +12,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const room = gameRoomManager.createRoom(hostId, hostName);
+    const room = await gameRoomManager.createRoom(hostId, hostName);
 
     return NextResponse.json({
       success: true,
       room,
     });
   } catch (error) {
+    console.error(error);
     return NextResponse.json(
       { error: "Failed to create room" },
       { status: 500 }

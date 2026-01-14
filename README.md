@@ -1,21 +1,23 @@
 # 4 in a Row - Multiplayer Game
 
-A real-time multiplayer 4 in a row (Connect Four style) game built with Next.js and fully Vercel-compatible.
+A real-time multiplayer 4 in a row (Connect Four style) game built with Next.js and fully Vercel-compatible with persistent state using Vercel KV.
 
 ## Features
 
 ✨ **3-Player Multiplayer** - Play with up to 3 players simultaneously
 🔑 **Room System** - Create rooms with auto-generated room keys
 👁️ **Spectators** - Others can watch ongoing games
-🎮 **Real-Time Updates** - Polling-based game state sync
-🚀 **Vercel Ready** - Deploy directly to Vercel with no backend server needed
+🎮 **Real-Time Updates** - Optimized polling (2s intervals) for Vercel compatibility
+📦 **Persistent State** - Uses Vercel KV on production, in-memory for local dev
+🚀 **Vercel Ready** - Deploy directly to Vercel with automatic KV integration
 
 ## Tech Stack
 
 - **Frontend**: Next.js 15+ with TypeScript
 - **Styling**: Tailwind CSS
 - **State Management**: React Hooks
-- **Backend**: Next.js API Routes (Express-compatible structure)
+- **Backend**: Next.js API Routes
+- **Storage**: Vercel KV (Redis) for production, In-Memory for local dev
 - **Real-time**: Polling mechanism
 
 ## How to Play
@@ -50,21 +52,39 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 - `POST /api/games/move` - Make a move
 - `POST /api/games/reset` - Reset the game
 
-## Deployment
+## Deployment to Vercel
 
-### Deploy to Vercel
-
+### Step 1: Push to GitHub
 ```bash
-vercel
+git add .
+git commit -m "4 in a row game ready for vercel"
+git push
 ```
 
-The game will work seamlessly on Vercel since all game logic runs in Next.js API routes with in-memory state management.
+### Step 2: Connect to Vercel
+1. Go to [vercel.com](https://vercel.com)
+2. Click "Add New..." → "Project"
+3. Import your GitHub repo
+4. Click "Deploy"
 
-### Important Notes
+### Step 3: Add KV Storage (Automatic)
+Vercel will detect the `@vercel/kv` package and prompt you to add KV storage:
+1. Click "Create Database" → "KV Store"
+2. Choose a region
+3. Vercel automatically sets `KV_REST_API_URL` and `KV_REST_API_TOKEN` env variables
+4. Redeploy
 
-- Game state is stored in memory and will reset when the server restarts
-- For production use with persistence, integrate a database (Firebase, PostgreSQL, etc.)
-- For better real-time updates in production, consider WebSockets instead of polling
+### That's it! 🚀
+Your game is now live and uses Vercel KV for persistent state storage.
+
+## Local Development
+
+For local development without KV:
+```bash
+npm run dev
+```
+
+The app automatically detects the absence of KV env variables and uses in-memory storage. This works perfectly fine for testing locally.
 
 ## Project Structure
 
@@ -93,8 +113,24 @@ The game will work seamlessly on Vercel since all game logic runs in Next.js API
 │   │   └── gameRoomManager.ts
 │   └── types/
 │       └── game.ts
-└── package.json
+├── .env.example
+├── package.json
+└── README.md
 ```
+
+## Storage Architecture
+
+The app uses an intelligent storage system:
+
+- **Production (Vercel)**: Uses Vercel KV (Redis)
+  - Automatic expiry of rooms after 24 hours
+  - Persistent state across function invocations
+  - Perfect for serverless environments
+
+- **Local Dev**: Uses in-memory Map
+  - Instant, no setup needed
+  - Resets on server restart (fine for dev)
+  - Same API as production
 
 ## Game Rules
 
@@ -104,6 +140,23 @@ The game will work seamlessly on Vercel since all game logic runs in Next.js API
 - Pieces fall to the lowest available position in a column
 - Maximum 3 players per game
 - Extra players join as spectators
+- Rooms auto-expire after 24 hours on production
+
+## Troubleshooting
+
+### Build Fails on Vercel
+- Check that all dependencies are in `package.json`
+- Verify TypeScript configuration in `tsconfig.json`
+- Check for any import path issues (use `@/` aliases)
+
+### Game State Lost After Deploy
+- Make sure Vercel KV is connected
+- Check `KV_REST_API_URL` env variable is set
+
+### Local Testing Issues
+- Clear `.next` folder: `rm -rf .next`
+- Reinstall dependencies: `npm install`
+- Run `npm run dev` again
 
 ## License
 

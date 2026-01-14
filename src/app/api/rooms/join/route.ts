@@ -9,16 +9,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "roomKey required" }, { status: 400 });
     }
 
-    const room = gameRoomManager.getRoomByKey(roomKey);
+    const room = await gameRoomManager.getRoomByKey(roomKey);
     if (!room) {
       return NextResponse.json({ error: "Room not found" }, { status: 404 });
     }
 
     let result;
     if (asSpectator) {
-      result = gameRoomManager.joinRoomAsSpectator(room.id, playerId);
+      result = await gameRoomManager.joinRoomAsSpectator(room.id, playerId);
     } else {
-      result = gameRoomManager.joinRoomAsPlayer(room.id, playerId, playerName);
+      result = await gameRoomManager.joinRoomAsPlayer(room.id, playerId, playerName);
     }
 
     if (!result.success) {
@@ -31,6 +31,7 @@ export async function POST(req: NextRequest) {
       room: result.room,
     });
   } catch (error) {
+    console.error(error);
     return NextResponse.json(
       { error: "Failed to join room" },
       { status: 500 }

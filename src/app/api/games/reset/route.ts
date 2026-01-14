@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "roomId required" }, { status: 400 });
     }
 
-    const result = gameRoomManager.resetGame(roomId);
+    const result = await gameRoomManager.resetGame(roomId);
 
     if (!result.success) {
       return NextResponse.json({ error: "Room not found" }, { status: 404 });
@@ -20,6 +20,7 @@ export async function POST(req: NextRequest) {
       room: result.room,
     });
   } catch (error) {
+    console.error(error);
     return NextResponse.json(
       { error: "Failed to reset game" },
       { status: 500 }

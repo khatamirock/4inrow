@@ -1,8 +1,12 @@
 import { GameRoom, Player } from "@/types/game";
 import { GameLogic } from "./gameLogic";
+import { kv } from "@vercel/kv";
+
+const USE_KV = process.env.KV_REST_API_URL ? true : false;
+const ROOM_EXPIRY = 86400; // 24 hours
 
 export class GameRoomManager {
-  private rooms: Map<string, GameRoom> = new Map();
+  private memoryRooms: Map<string, GameRoom> = new Map();
 
   generateRoomKey(): string {
     return Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -12,7 +16,7 @@ export class GameRoomManager {
     return `room_${Date.now()}_${Math.random().toString(36).substring(7)}`;
   }
 
-  createRoom(hostId: string, hostName: string): GameRoom {
+  async createRoom(hostId: string, hostName: string): Promise<GameRoom> {
     const room: GameRoom = {
       id: this.generateRoomId(),
       roomKey: this.generateRoomKey(),
@@ -33,34 +37,59 @@ export class GameRoomManager {
       createdAt: new Date(),
     };
 
-    this.rooms.set(room.id, room);
+    if (USE_KV) {
+      await kv.setex(`room:${room.id}`, ROOM_EXPIRY, JSON.stringify(room));
+      await kv.setex(`roomkey:${room.roomKey}`, ROOM_EXPIRY, room.id);
+    } else {
+      this.memoryRooms.set(room.id, room);
+    }
+
     return room;
   }
 
-  getRoomByKey(roomKey: string): GameRoom | null {
-    for (const room of this.rooms.values()) {
-      if (room.roomKey === roomKey) {
-        return room;
+  async getRoomByKey(roomKey: string): Promise<GameRoom | null> {
+    if (USE_KV) {
+      const roomId = (await kv.get(`roomkey:${roomKey}`)) as string | null;
+      if (!roomId) return null;
+      const roomData = await kv.get(`room:${roomId}`);
+      return roomData ? JSON.parse(roomData as string) : null;
+    } else {
+      for (const room of this.memoryRooms.values()) {
+        if (room.roomKey === roomKey) {
+          return room;
+        }
       }
+      return null;
     }
-    return null;
   }
 
-  getRoom(roomId: string): GameRoom | null {
-    return this.rooms.get(roomId) || null;
+  async getRoom(roomId: string): Promise<GameRoom | null> {
+    if (USE_KV) {
+      const roomData = await kv.get(`room:${roomId}`);
+      return roomData ? JSON.parse(roomData as string) : null;
+    } else {
+      return this.memoryRooms.get(roomId) || null;
+    }
   }
 
-  joinRoomAsPlayer(
+  private async saveRoom(room: GameRoom): Promise<void> {
+    if (USE_KV) {
+      await kv.setex(`room:${room.id}`, ROOM_EXPIRY, JSON.stringify(room));
+    } else {
+      this.memoryRooms.set(room.id, room);
+    }
+  }
+
+  async joinRoomAsPlayer(
     roomId: string,
     playerId: string,
     playerName: string
-  ): { success: boolean; message: string; room?: GameRoom } {
-    const room = this.rooms.get(roomId);
+  ): Promise<{ success: boolean; message: string; room?: GameRoom }> {
+    const room = await this.getRoom(roomId);
     if (!room) {
       return { success: false, message: "Room not found" };
     }
 
-    // Check if already in room
     if (
       room.players.some((p) => p.id === playerId) ||
       room.spectators.includes(playerId)
@@ -68,7 +97,6 @@ export class GameRoomManager {
       return { success: true, message: "Already in room", room };
     }
 
-    // Check if game is already full
     if (room.players.length >= room.maxPlayers) {
       return {
         success: false,
@@ -76,7 +104,6 @@ export class GameRoomManager {
       };
     }
 
-    // Add as player
     const playerNumber = room.players.length + 1;
     room.players.push({
       id: playerId,
@@ -84,19 +111,19 @@ export class GameRoomManager {
       playerNumber,
     });
 
-    // Start game if 2+ players
     if (room.players.length >= 2 && room.status === "waiting") {
       room.status = "playing";
     }
 
+    await this.saveRoom(room);
     return { success: true, message: "Joined as player", room };
   }
 
-  joinRoomAsSpectator(
+  async joinRoomAsSpectator(
     roomId: string,
     spectatorId: string
-  ): { success: boolean; message: string; room?: GameRoom } {
-    const room = this.rooms.get(roomId);
+  ): Promise<{ success: boolean; message: string; room?: GameRoom }> {
+    const room = await this.getRoom(roomId);
     if (!room) {
       return { success: false, message: "Room not found" };
     }
@@ -106,15 +133,16 @@ export class GameRoomManager {
     }
 
     room.spectators.push(spectatorId);
+    await this.saveRoom(room);
     return { success: true, message: "Joined as spectator", room };
   }
 
-  makeMove(
+  async makeMove(
     roomId: string,
     playerId: string,
     column: number
-  ): { success: boolean; message: string; room?: GameRoom } {
-    const room = this.rooms.get(roomId);
+  ): Promise<{ success: boolean; message: string; room?: GameRoom }> {
+    const room = await this.getRoom(roomId);
     if (!room) {
       return { success: false, message: "Room not found" };
     }
@@ -137,7 +165,6 @@ export class GameRoomManager {
       return { success: false, message: "Invalid move - column full" };
     }
 
-    // Check for winner
     if (moveResult.row !== undefined) {
       if (
         GameLogic.checkWinner(
@@ -149,6 +176,7 @@ export class GameRoomManager {
       ) {
         room.winner = player.playerNumber;
         room.status = "finished";
+        await this.saveRoom(room);
         return {
           success: true,
           message: `Player ${player.playerNumber} wins!`,
@@ -157,22 +185,24 @@ export class GameRoomManager {
       }
     }
 
-    // Check for draw
     if (GameLogic.isBoardFull(room.board)) {
       room.status = "finished";
-      room.winner = 0; // 0 means draw
+      room.winner = 0;
+      await this.saveRoom(room);
       return { success: true, message: "Draw!", room };
     }
 
-    // Switch to next player
     const nextPlayer = (room.currentPlayer % room.players.length) + 1;
     room.currentPlayer = nextPlayer;
 
+    await this.saveRoom(room);
     return { success: true, message: "Move made", room };
   }
 
-  resetGame(roomId: string): { success: boolean; room?: GameRoom } {
-    const room = this.rooms.get(roomId);
+  async resetGame(
+    roomId: string
+  ): Promise<{ success: boolean; room?: GameRoom }> {
+    const room = await this.getRoom(roomId);
     if (!room) {
       return { success: false };
     }
@@ -182,17 +212,26 @@ export class GameRoomManager {
     room.status = "playing";
     room.winner = null;
 
+    await this.saveRoom(room);
     return { success: true, room };
   }
 
-  deleteRoom(roomId: string): boolean {
-    return this.rooms.delete(roomId);
+  async deleteRoom(roomId: string): Promise<boolean> {
+    if (USE_KV) {
+      await kv.del(`room:${roomId}`);
+      return true;
+    } else {
+      return this.memoryRooms.delete(roomId);
+    }
   }
 
-  getAllRooms(): GameRoom[] {
-    return Array.from(this.rooms.values());
+  async getAllRooms(): Promise<GameRoom[]> {
+    if (USE_KV) {
+      return [];
+    } else {
+      return Array.from(this.memoryRooms.values());
+    }
   }
 }
 
-// Singleton instance for use across the app
 export const gameRoomManager = new GameRoomManager();

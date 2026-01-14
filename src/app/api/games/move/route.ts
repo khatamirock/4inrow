@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const result = gameRoomManager.makeMove(roomId, playerId, column);
+    const result = await gameRoomManager.makeMove(roomId, playerId, column);
 
     if (!result.success) {
       return NextResponse.json({ error: result.message }, { status: 400 });
@@ -24,6 +24,7 @@ export async function POST(req: NextRequest) {
       room: result.room,
     });
   } catch (error) {
+    console.error(error);
     return NextResponse.json(
       { error: "Failed to make move" },
       { status: 500 }

@@ -7,7 +7,7 @@ import Board from "@/components/Board";
 import PlayerList from "@/components/PlayerList";
 import GameInfo from "@/components/GameInfo";
 
-const POLL_INTERVAL = 500; // Poll every 500ms for updates
+const POLL_INTERVAL = 2000; // Poll every 2 seconds for updates (Vercel-optimized)
 
 export default function GamePage({ params }: { params: { roomId: string } }) {
   const [room, setRoom] = useState<GameRoom | null>(null);
@@ -37,12 +37,18 @@ export default function GamePage({ params }: { params: { roomId: string } }) {
     }
   }, [params.roomId, playerId]);
 
-  // Polling effect
+  // Polling effect - optimized for Vercel
   useEffect(() => {
     fetchRoom();
-    const interval = setInterval(fetchRoom, POLL_INTERVAL);
-    return () => clearInterval(interval);
-  }, [fetchRoom]);
+
+    // Only poll if game is active and user is participating
+    const shouldPoll = room?.status === 'playing' || room?.status === 'waiting';
+
+    if (shouldPoll) {
+      const interval = setInterval(fetchRoom, POLL_INTERVAL);
+      return () => clearInterval(interval);
+    }
+  }, [fetchRoom, room?.status]);
 
   const handleMove = async (column: number) => {
     if (!room || !isCurrentPlayer) return;
