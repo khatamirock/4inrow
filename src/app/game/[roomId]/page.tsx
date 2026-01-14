@@ -119,6 +119,16 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
             setIsCurrentPlayer(false); // Game is over
           });
 
+          socketInstance.on('move-error', (data) => {
+            console.log('Move error via WebSocket:', data);
+            setError(data.message);
+          });
+
+          socketInstance.on('reset-error', (data) => {
+            console.log('Reset error via WebSocket:', data);
+            setError(data.message);
+          });
+
           socketInstance.on('disconnect', () => {
             console.log('Disconnected from WebSocket server');
           });
