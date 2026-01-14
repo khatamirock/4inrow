@@ -254,7 +254,7 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
           <div>
             <h1 style={{ fontSize: '36px', fontWeight: 'bold', backgroundImage: 'linear-gradient(90deg, #60a5fa 0%, #22d3ee 100%)', backgroundClip: 'text', WebkitBackgroundClip: 'text', color: 'transparent' }}>
-              4 in a Row (10x10)
+              3 in a Row (10x10)
             </h1>
             <p style={{ color: '#9ca3af' }}>Room: {room.roomKey}</p>
           </div>

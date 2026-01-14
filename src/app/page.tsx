@@ -80,7 +80,7 @@ export default function Home() {
       <div style={{ maxWidth: '448px', width: '100%', display: 'flex', flexDirection: 'column', gap: '32px' }}>
         <div style={{ textAlign: 'center' }}>
           <h1 style={{ fontSize: '48px', fontWeight: 'bold', backgroundImage: 'linear-gradient(90deg, #60a5fa 0%, #22d3ee 100%)', backgroundClip: 'text', WebkitBackgroundClip: 'text', color: 'transparent', marginBottom: '8px' }}>
-            4 in a Row
+            3 in a Row
           </h1>
           <p style={{ color: '#d1d5db', fontSize: '18px' }}>Multiplayer Game</p>
         </div>

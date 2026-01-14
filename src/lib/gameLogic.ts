@@ -1,7 +1,7 @@
-// Game logic for 4 in a row
+// Game logic for 3 in a row (3-player game)
 export const BOARD_ROWS = 10;
 export const BOARD_COLS = 10;
-export const WIN_LENGTH = 4;
+export const WIN_LENGTH = 3;
 
 export class GameLogic {
   static createBoard(): (number | null)[][] {
