@@ -1,6 +1,6 @@
 // Game logic for 4 in a row
-export const BOARD_ROWS = 6;
-export const BOARD_COLS = 7;
+export const BOARD_ROWS = 10;
+export const BOARD_COLS = 10;
 export const WIN_LENGTH = 4;
 
 export class GameLogic {
