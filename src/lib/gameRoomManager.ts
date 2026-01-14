@@ -4,6 +4,10 @@ import { kv } from "@vercel/kv";
 
 const USE_KV = process.env.KV_REST_API_URL ? true : false;
 
+// In-memory cache for active games (shared across all requests to this server instance)
+const activeRoomsCache = new Map<string, { room: GameRoom; lastSaved: number }>();
+const CACHE_SAVE_INTERVAL = 30000; // Save to KV every 30 seconds if room has changes
+
 export class GameRoomManager {
   private memoryRooms: Map<string, GameRoom> = new Map();
 
@@ -64,23 +68,39 @@ export class GameRoomManager {
   }
 
   async getRoom(roomId: string): Promise<GameRoom | null> {
+    // Check in-memory cache first (fast, no KV calls)
+    const cached = activeRoomsCache.get(roomId);
+    if (cached) {
+      return cached.room;
+    }
+
+    // If not in cache, try KV for recovery
     if (USE_KV) {
       const roomData = await kv.get(`room:${roomId}`);
-      return roomData ? JSON.parse(roomData as string) : null;
-    } else {
-      return this.memoryRooms.get(roomId) || null;
+      if (roomData) {
+        const room = JSON.parse(roomData as string);
+        // Put it back in memory cache
+        activeRoomsCache.set(roomId, { room, lastSaved: Date.now() });
+        return room;
+      }
     }
+
+    return null;
   }
 
   private async saveRoom(room: GameRoom): Promise<void> {
-    if (USE_KV) {
-      // Refresh TTL only on writes - much longer for stability
-      // Use consistent 30-day expiry for all states to ensure room never expires mid-game
+    // Always save to in-memory cache (instant, shared across users)
+    activeRoomsCache.set(room.id, { room, lastSaved: Date.now() });
+
+    // Save to KV periodically for persistence/recovery
+    const cached = activeRoomsCache.get(room.id)!;
+    const timeSinceLastSave = Date.now() - cached.lastSaved;
+    
+    if (USE_KV && timeSinceLastSave > CACHE_SAVE_INTERVAL) {
       const expiry = 2592000; // 30 days
       await kv.setex(`room:${room.id}`, expiry, JSON.stringify(room));
       await kv.setex(`roomkey:${room.roomKey}`, expiry, room.id);
-    } else {
-      this.memoryRooms.set(room.id, room);
+      cached.lastSaved = Date.now();
     }
   }
 
