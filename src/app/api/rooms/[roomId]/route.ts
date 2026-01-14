@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { gameRoomManager } from "@/lib/gameRoomManager";
 
 export async function GET(
-  req: NextRequest,
-  { params }: { params: { roomId: string } }
+  _req: NextRequest,
+  { params }: { params: Promise<{ roomId: string }> }
 ) {
   try {
-    const room = await gameRoomManager.getRoom(params.roomId);
+    const { roomId } = await params;
+    const room = await gameRoomManager.getRoom(roomId);
     if (!room) {
       return NextResponse.json({ error: "Room not found" }, { status: 404 });
     }

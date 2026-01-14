@@ -66,24 +66,24 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-black flex items-center justify-center p-4">
-      <div className="max-w-md w-full space-y-8">
-        <div className="text-center">
-          <h1 className="text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400 mb-2">
+    <div style={{ minHeight: '100vh', backgroundImage: 'linear-gradient(135deg, #111827 0%, #1e3c72 50%, #000000 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+      <div style={{ maxWidth: '448px', width: '100%', display: 'flex', flexDirection: 'column', gap: '32px' }}>
+        <div style={{ textAlign: 'center' }}>
+          <h1 style={{ fontSize: '48px', fontWeight: 'bold', backgroundImage: 'linear-gradient(90deg, #60a5fa 0%, #22d3ee 100%)', backgroundClip: 'text', WebkitBackgroundClip: 'text', color: 'transparent', marginBottom: '8px' }}>
             4 in a Row
           </h1>
-          <p className="text-gray-300 text-lg">Multiplayer Game</p>
+          <p style={{ color: '#d1d5db', fontSize: '18px' }}>Multiplayer Game</p>
         </div>
 
-        <div className="bg-gray-800 rounded-lg p-8 space-y-6 shadow-2xl">
+        <div style={{ background: '#1f2937', borderRadius: '8px', padding: '32px', display: 'flex', flexDirection: 'column', gap: '24px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
           {error && (
-            <div className="bg-red-900 border border-red-700 text-red-100 px-4 py-3 rounded">
+            <div style={{ background: '#7f1d1d', border: '1px solid #991b1b', color: '#fee2e2', padding: '16px', borderRadius: '8px' }}>
               {error}
             </div>
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
+            <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', color: '#d1d5db', marginBottom: '8px' }}>
               Your Name
             </label>
             <input
@@ -91,7 +91,6 @@ export default function Home() {
               value={playerName}
               onChange={(e) => setPlayerName(e.target.value)}
               placeholder="Enter your name"
-              className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
               onKeyPress={(e) => {
                 if (e.key === "Enter") handleCreateRoom();
               }}
@@ -101,22 +100,36 @@ export default function Home() {
           <button
             onClick={handleCreateRoom}
             disabled={isCreating}
-            className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 disabled:opacity-50 text-white font-bold py-3 px-4 rounded-lg transition transform hover:scale-105"
+            style={{
+              width: '100%',
+              backgroundImage: 'linear-gradient(90deg, #2563eb 0%, #0891b2 100%)',
+              color: 'white',
+              fontWeight: 'bold',
+              padding: '12px 16px',
+              borderRadius: '8px',
+              border: 'none',
+              cursor: isCreating ? 'not-allowed' : 'pointer',
+              transition: 'all 0.3s ease',
+              opacity: isCreating ? 0.5 : 1,
+              transform: 'scale(1)'
+            }}
+            onMouseEnter={(e) => !isCreating && (e.currentTarget.style.transform = 'scale(1.05)')}
+            onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
           >
             {isCreating ? "Loading..." : "Create Room"}
           </button>
 
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-600"></div>
+          <div style={{ position: 'relative' }}>
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center' }}>
+              <div style={{ width: '100%', borderTop: '1px solid #4b5563' }}></div>
             </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-gray-800 text-gray-400">Or</span>
+            <div style={{ position: 'relative', display: 'flex', justifyContent: 'center', fontSize: '14px' }}>
+              <span style={{ padding: '0 8px', background: '#1f2937', color: '#9ca3af' }}>Or</span>
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
+            <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', color: '#d1d5db', marginBottom: '8px' }}>
               Room Key
             </label>
             <input
@@ -124,7 +137,6 @@ export default function Home() {
               value={roomKey}
               onChange={(e) => setRoomKey(e.target.value)}
               placeholder="Enter room key"
-              className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
               onKeyPress={(e) => {
                 if (e.key === "Enter") handleJoinRoom();
               }}
@@ -134,13 +146,27 @@ export default function Home() {
           <button
             onClick={handleJoinRoom}
             disabled={isCreating}
-            className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 text-white font-bold py-3 px-4 rounded-lg transition transform hover:scale-105"
+            style={{
+              width: '100%',
+              backgroundImage: 'linear-gradient(90deg, #9333ea 0%, #db2777 100%)',
+              color: 'white',
+              fontWeight: 'bold',
+              padding: '12px 16px',
+              borderRadius: '8px',
+              border: 'none',
+              cursor: isCreating ? 'not-allowed' : 'pointer',
+              transition: 'all 0.3s ease',
+              opacity: isCreating ? 0.5 : 1,
+              transform: 'scale(1)'
+            }}
+            onMouseEnter={(e) => !isCreating && (e.currentTarget.style.transform = 'scale(1.05)')}
+            onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
           >
             {isCreating ? "Loading..." : "Join Room"}
           </button>
         </div>
 
-        <div className="text-center text-gray-400 text-sm">
+        <div style={{ textAlign: 'center', color: '#9ca3af', fontSize: '14px' }}>
           <p>🎮 Play with up to 3 players</p>
           <p>👁️ Others can spectate</p>
           <p>🏆 First to 4 in a row wins!</p>

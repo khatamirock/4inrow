@@ -9,7 +9,7 @@ import GameInfo from "@/components/GameInfo";
 
 const POLL_INTERVAL = 2000; // Poll every 2 seconds for updates (Vercel-optimized)
 
-export default function GamePage({ params }: { params: { roomId: string } }) {
+export default function GamePage({ params }: { params: Promise<{ roomId: string }> }) {
   const [room, setRoom] = useState<GameRoom | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -19,7 +19,8 @@ export default function GamePage({ params }: { params: { roomId: string } }) {
   // Fetch room data
   const fetchRoom = useCallback(async () => {
     try {
-      const response = await axios.get(`/api/rooms/${params.roomId}`);
+      const resolvedParams = await params;
+      const response = await axios.get(`/api/rooms/${resolvedParams.roomId}`);
       setRoom(response.data.room);
       setLoading(false);
 
@@ -35,7 +36,7 @@ export default function GamePage({ params }: { params: { roomId: string } }) {
       setError("Failed to load room");
       setLoading(false);
     }
-  }, [params.roomId, playerId]);
+  }, [params, playerId]);
 
   // Polling effect - optimized for Vercel
   useEffect(() => {
@@ -54,8 +55,9 @@ export default function GamePage({ params }: { params: { roomId: string } }) {
     if (!room || !isCurrentPlayer) return;
 
     try {
+      const resolvedParams = await params;
       const response = await axios.post("/api/games/move", {
-        roomId: params.roomId,
+        roomId: resolvedParams.roomId,
         playerId,
         column,
       });
@@ -68,8 +70,9 @@ export default function GamePage({ params }: { params: { roomId: string } }) {
 
   const handleReset = async () => {
     try {
+      const resolvedParams = await params;
       const response = await axios.post("/api/games/reset", {
-        roomId: params.roomId,
+        roomId: resolvedParams.roomId,
       });
 
       setRoom(response.data.room);
@@ -81,10 +84,10 @@ export default function GamePage({ params }: { params: { roomId: string } }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-4xl font-bold text-white mb-4">Loading...</h1>
-          <p className="text-gray-400">Connecting to game room</p>
+      <div style={{ minHeight: '100vh', background: '#111827', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center' }}>
+          <h1 style={{ fontSize: '36px', fontWeight: 'bold', color: 'white', marginBottom: '16px' }}>Loading...</h1>
+          <p style={{ color: '#9ca3af' }}>Connecting to game room</p>
         </div>
       </div>
     );
@@ -92,10 +95,10 @@ export default function GamePage({ params }: { params: { roomId: string } }) {
 
   if (!room) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-4xl font-bold text-red-500 mb-4">Room Not Found</h1>
-          <a href="/" className="text-blue-400 hover:text-blue-300">
+      <div style={{ minHeight: '100vh', background: '#111827', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center' }}>
+          <h1 style={{ fontSize: '36px', fontWeight: 'bold', color: '#ef4444', marginBottom: '16px' }}>Room Not Found</h1>
+          <a href="/" style={{ color: '#60a5fa', textDecoration: 'none' }}>
             Back to home
           </a>
         </div>
@@ -108,34 +111,36 @@ export default function GamePage({ params }: { params: { roomId: string } }) {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-black p-6">
-      <div className="max-w-6xl mx-auto">
+    <div style={{ minHeight: '100vh', backgroundImage: 'linear-gradient(135deg, #111827 0%, #1e3c72 50%, #000000 100%)', padding: '24px' }}>
+      <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
         {/* Header */}
-        <div className="flex justify-between items-center mb-8">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
           <div>
-            <h1 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400">
+            <h1 style={{ fontSize: '36px', fontWeight: 'bold', backgroundImage: 'linear-gradient(90deg, #60a5fa 0%, #22d3ee 100%)', backgroundClip: 'text', WebkitBackgroundClip: 'text', color: 'transparent' }}>
               4 in a Row
             </h1>
-            <p className="text-gray-400">Room: {room.roomKey}</p>
+            <p style={{ color: '#9ca3af' }}>Room: {room.roomKey}</p>
           </div>
           <a
             href="/"
-            className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition"
+            style={{ padding: '8px 16px', backgroundColor: '#374151', color: 'white', borderRadius: '8px', textDecoration: 'none', transition: 'all 0.3s ease' }}
+            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#4b5563')}
+            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#374151')}
           >
             Exit
           </a>
         </div>
 
         {error && (
-          <div className="bg-red-900 border border-red-700 text-red-100 px-4 py-3 rounded mb-6">
+          <div style={{ background: '#7f1d1d', border: '1px solid #991b1b', color: '#fee2e2', padding: '16px', borderRadius: '8px', marginBottom: '24px' }}>
             {error}
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '32px' }}>
           {/* Game Board */}
-          <div className="lg:col-span-2">
-            <div className="bg-gray-800 rounded-lg p-6 shadow-2xl">
+          <div style={{ gridColumn: 'span 2' }}>
+            <div style={{ background: '#1f2937', borderRadius: '8px', padding: '24px', boxShadow: '0 20px 25px -5rgba(0, 0, 0, 0.1)' }}>
               <Board
                 board={room.board}
                 onMove={handleMove}
@@ -153,24 +158,24 @@ export default function GamePage({ params }: { params: { roomId: string } }) {
           </div>
 
           {/* Players & Info */}
-          <div className="space-y-6">
-            <div className="bg-gray-800 rounded-lg p-6 shadow-2xl">
-              <h2 className="text-xl font-bold text-white mb-4">Players</h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div style={{ background: '#1f2937', borderRadius: '8px', padding: '24px', boxShadow: '0 20px 25px -5rgba(0, 0, 0, 0.1)' }}>
+              <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: 'white', marginBottom: '16px' }}>Players</h2>
               <PlayerList room={room} playerId={playerId} />
             </div>
 
-            <div className="bg-gray-800 rounded-lg p-6 shadow-2xl">
-              <h2 className="text-xl font-bold text-white mb-4">Game Info</h2>
-              <div className="space-y-3 text-gray-300">
+            <div style={{ background: '#1f2937', borderRadius: '8px', padding: '24px', boxShadow: '0 20px 25px -5rgba(0, 0, 0, 0.1)' }}>
+              <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: 'white', marginBottom: '16px' }}>Game Info</h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', color: '#d1d5db' }}>
                 <div>
-                  <p className="text-sm text-gray-400">Status</p>
-                  <p className="font-semibold capitalize text-white">
+                  <p style={{ fontSize: '14px', color: '#9ca3af' }}>Status</p>
+                  <p style={{ fontWeight: '600', textTransform: 'capitalize', color: 'white' }}>
                     {room.status}
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-400">Current Turn</p>
-                  <p className="font-semibold text-white">
+                  <p style={{ fontSize: '14px', color: '#9ca3af' }}>Current Turn</p>
+                  <p style={{ fontWeight: '600', color: 'white' }}>
                     {currentPlayerObj?.name} (Player {room.currentPlayer})
                   </p>
                 </div>

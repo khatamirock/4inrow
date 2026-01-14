@@ -16,22 +16,24 @@ export default function GameInfo({
   onReset,
 }: GameInfoProps) {
   return (
-    <div className="mt-6 space-y-4">
+    <div style={{ marginTop: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
       {room.status === "finished" && (
-        <div className="bg-gradient-to-r from-yellow-600 to-orange-600 p-4 rounded-lg text-center">
-          <p className="text-2xl font-bold text-white">
+        <div style={{ backgroundImage: 'linear-gradient(90deg, #ca8a04 0%, #ea580c 100%)', padding: '16px', borderRadius: '8px', textAlign: 'center' }}>
+          <p style={{ fontSize: '24px', fontWeight: 'bold', color: 'white' }}>
             {room.winner === 0
               ? "🤝 It's a Draw!"
               : `🎉 Player ${room.winner} Wins!`}
           </p>
           {room.winner !== 0 && room.players.find((p) => p.playerNumber === room.winner) && (
-            <p className="text-white">
+            <p style={{ color: 'white' }}>
               Congratulations {room.players.find((p) => p.playerNumber === room.winner)?.name}!
             </p>
           )}
           <button
             onClick={onReset}
-            className="mt-3 px-4 py-2 bg-white text-orange-600 font-bold rounded hover:bg-gray-100 transition"
+            style={{ marginTop: '12px', padding: '8px 16px', background: 'white', color: '#ea580c', fontWeight: 'bold', borderRadius: '8px', border: 'none', cursor: 'pointer', transition: 'all 0.3s ease' }}
+            onMouseOver={(e) => (e.currentTarget.style.background = '#f3f4f6')}
+            onMouseOut={(e) => (e.currentTarget.style.background = 'white')}
           >
             Play Again
           </button>
@@ -39,19 +41,19 @@ export default function GameInfo({
       )}
 
       {room.status === "playing" && (
-        <div className="bg-blue-600 p-4 rounded-lg text-center">
-          <p className="text-sm text-blue-100">Current Turn</p>
-          <p className="text-xl font-bold text-white">{currentPlayerObj?.name}</p>
-          {isCurrentPlayer && <p className="text-yellow-300 text-sm mt-1">👉 Your turn!</p>}
+        <div style={{ background: '#2563eb', padding: '16px', borderRadius: '8px', textAlign: 'center' }}>
+          <p style={{ fontSize: '14px', color: '#dbeafe' }}>Current Turn</p>
+          <p style={{ fontSize: '20px', fontWeight: 'bold', color: 'white' }}>{currentPlayerObj?.name}</p>
+          {isCurrentPlayer && <p style={{ color: '#fcd34d', fontSize: '14px', marginTop: '4px' }}>👉 Your turn!</p>}
         </div>
       )}
 
       {room.status === "waiting" && (
-        <div className="bg-purple-600 p-4 rounded-lg text-center">
-          <p className="text-white font-semibold">
+        <div style={{ background: '#9333ea', padding: '16px', borderRadius: '8px', textAlign: 'center' }}>
+          <p style={{ color: 'white', fontWeight: '600' }}>
             Waiting for {3 - room.players.length} more player{3 - room.players.length !== 1 ? "s" : ""}...
           </p>
-          <p className="text-sm text-purple-200 mt-1">Share room key: {room.roomKey}</p>
+          <p style={{ fontSize: '14px', color: '#e9d5ff', marginTop: '4px' }}>Share room key: {room.roomKey}</p>
         </div>
       )}
     </div>

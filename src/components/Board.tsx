@@ -24,7 +24,7 @@ const Board = memo(function Board({ board, onMove, isCurrentPlayer }: BoardProps
   };
 
   return (
-    <div className="space-y-4">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       <div className="board">
         {board.map((row, rowIdx) =>
           row.map((cell, colIdx) => (
@@ -32,13 +32,15 @@ const Board = memo(function Board({ board, onMove, isCurrentPlayer }: BoardProps
               key={`${rowIdx}-${colIdx}`}
               onClick={() => handleColumnClick(colIdx)}
               disabled={!isCurrentPlayer}
-              className={`cell ${getPlayerColor(cell)} ${
-                !isCurrentPlayer ? "opacity-50" : "hover:opacity-80"
-              }`}
+              className={`cell ${getPlayerColor(cell)}`}
+              style={{
+                opacity: !isCurrentPlayer ? 0.5 : 1,
+                cursor: isCurrentPlayer ? 'pointer' : 'not-allowed'
+              }}
               title={isCurrentPlayer ? `Click to place in column ${colIdx}` : "Wait for your turn"}
             >
               {cell && (
-                <span className="text-xs font-bold opacity-50">
+                <span style={{ fontSize: '12px', fontWeight: 'bold', opacity: 0.5 }}>
                   P{cell}
                 </span>
               )}
@@ -47,7 +49,7 @@ const Board = memo(function Board({ board, onMove, isCurrentPlayer }: BoardProps
         )}
       </div>
       {!isCurrentPlayer && (
-        <p className="text-center text-yellow-400 text-sm">⏳ Waiting for your turn...</p>
+        <p style={{ textAlign: 'center', color: '#fcd34d', fontSize: '14px' }}>⏳ Waiting for your turn...</p>
       )}
     </div>
   );

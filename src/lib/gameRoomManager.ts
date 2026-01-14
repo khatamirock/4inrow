@@ -1,4 +1,4 @@
-import { GameRoom, Player } from "@/types/game";
+import { GameRoom } from "@/types/game";
 import { GameLogic } from "./gameLogic";
 import { kv } from "@vercel/kv";
 
