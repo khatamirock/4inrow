@@ -2,7 +2,6 @@ import { GameRoom } from "@/types/game";
 import { GameLogic } from "./gameLogic";
 import { kv } from "@vercel/kv";
 import { BlobStorage } from "./blobStorage";
-import { update } from "@vercel/edge-config";
 
 // Access global io instance
 
@@ -167,8 +166,31 @@ export class GameRoomManager {
         players: room.players,
         lastUpdated: Date.now()
       };
-      await update({ [`board:${room.id}`]: boardData });
-      console.log(`Board ${room.id} synced to Edge Config`);
+
+      // Use Edge Config REST API to update (requires EDGE_CONFIG_ACCESS_TOKEN)
+      const edgeConfigToken = process.env.EDGE_CONFIG_ACCESS_TOKEN;
+      if (edgeConfigToken) {
+        const response = await fetch(`https://api.vercel.com/v1/edge-config/${process.env.EDGE_CONFIG}/items`, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${edgeConfigToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            items: [{
+              operation: 'upsert',
+              key: `board:${room.id}`,
+              value: boardData
+            }]
+          })
+        });
+
+        if (response.ok) {
+          console.log(`Board ${room.id} synced to Edge Config`);
+        } else {
+          console.error(`Failed to sync board ${room.id} to Edge Config:`, response.statusText);
+        }
+      }
     } catch (error) {
       console.error(`Failed to sync board ${room.id} to Edge Config:`, error);
       // Continue without throwing - board stays in memory cache

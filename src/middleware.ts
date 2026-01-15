@@ -5,7 +5,8 @@ export const config = { matcher: '/api/boards/:roomId*' };
 
 export async function middleware(request: Request) {
   const url = new URL(request.url);
-  const roomId = url.pathname.split('/api/boards/')[1];
+  const pathParts = url.pathname.split('/api/boards/');
+  const roomId = pathParts[1]?.split('/')[0]; // Handle potential trailing slashes
 
   if (!roomId) {
     return NextResponse.json({ error: 'Room ID required' }, { status: 400 });

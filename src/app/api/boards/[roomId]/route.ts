@@ -3,10 +3,11 @@ import { get } from "@vercel/edge-config";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { roomId: string } }
+  { params }: { params: Promise<{ roomId: string }> }
 ) {
   try {
-    const roomId = params.roomId;
+    const resolvedParams = await params;
+    const roomId = resolvedParams.roomId;
 
     if (!roomId) {
       return NextResponse.json(
