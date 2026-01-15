@@ -105,4 +105,16 @@ export class GameLogic {
   static isBoardFull(board: (number | null)[][]): boolean {
     return board[0].every((cell) => cell !== null);
   }
+
+  static getMoveCount(board: (number | null)[][]): number {
+    let count = 0;
+    for (let row = 0; row < BOARD_ROWS; row++) {
+      for (let col = 0; col < BOARD_COLS; col++) {
+        if (board[row][col] !== null) {
+          count++;
+        }
+      }
+    }
+    return count;
+  }
 }

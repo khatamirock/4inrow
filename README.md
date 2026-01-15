@@ -1,6 +1,6 @@
 # 4 in a Row - Multiplayer Game
 
-A real-time multiplayer 4 in a row (Connect Four style) game built with Next.js and fully Vercel-compatible with persistent state using Vercel KV.
+A real-time multiplayer 4 in a row (Connect Four style) game built with Next.js and fully Vercel-compatible with persistent state using Vercel KV and Blob storage.
 
 ## Features
 
@@ -122,7 +122,9 @@ The app automatically detects the absence of KV env variables and uses in-memory
 
 The app uses an intelligent storage system:
 
-- **Production (Vercel)**: Uses Vercel KV (Redis)
+- **Production (Vercel)**: Uses Vercel KV (Redis) + Vercel Blob
+  - **KV**: Game room states, player data, real-time game state
+  - **Blob**: Game logs, backups, analytics data
   - Automatic expiry of rooms after 24 hours
   - Persistent state across function invocations
   - Perfect for serverless environments
@@ -131,6 +133,46 @@ The app uses an intelligent storage system:
   - Instant, no setup needed
   - Resets on server restart (fine for dev)
   - Same API as production
+
+### Vercel Blob Integration
+
+Vercel Blob is used for storing game logs and backups:
+
+- **Game Logs**: Every game completion (win/draw) is logged to Blob storage
+- **Game Backups**: Full room state can be backed up to Blob
+- **Analytics**: Track game statistics and player behavior
+
+#### Setting up Vercel Blob
+
+1. In your Vercel dashboard, go to Storage → Blob
+2. Click "Create Database"
+3. Vercel will automatically set the `BLOB_READ_WRITE_TOKEN` environment variable
+4. Redeploy your application
+
+#### Testing Blob Storage
+
+Visit `/api/test-blob` to test your Blob connection:
+
+```json
+{
+  "blob_enabled": true,
+  "message": "Blob storage is working correctly!",
+  "test": {
+    "uploaded": { "url": "...", "key": "..." },
+    "found": "test_123456.json",
+    "cleaned_up": true
+  }
+}
+```
+
+#### Blob API Endpoints
+
+- `GET /api/test-blob` - Test Blob storage connection
+- `POST /api/test-blob` - Store/retrieve game logs and backups
+  - `store_game_log` - Store game completion log
+  - `store_game_backup` - Store full game state backup
+  - `get_game_logs` - Retrieve logs for a room
+  - `get_game_backups` - Retrieve backups for a room
 
 ## Game Rules
 

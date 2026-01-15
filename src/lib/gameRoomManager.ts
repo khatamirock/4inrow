@@ -1,6 +1,7 @@
 import { GameRoom } from "@/types/game";
 import { GameLogic } from "./gameLogic";
 import { kv } from "@vercel/kv";
+import { BlobStorage } from "./blobStorage";
 
 // Access global io instance
 
@@ -177,6 +178,24 @@ export class GameRoomManager {
     }
   }
 
+  private async logGameEvent(roomId: string, event: string, data: any): Promise<void> {
+    try {
+      const logData = {
+        timestamp: new Date().toISOString(),
+        roomId,
+        event,
+        data
+      };
+
+      // Store game log in Blob storage
+      await BlobStorage.storeGameLog(roomId, logData);
+      console.log(`Game event logged: ${event} for room ${roomId}`);
+    } catch (error) {
+      console.error(`Failed to log game event ${event} for room ${roomId}:`, error);
+      // Don't throw - logging failure shouldn't break the game
+    }
+  }
+
   async joinRoomAsPlayer(
     roomId: string,
     playerId: string,
@@ -279,6 +298,15 @@ export class GameRoomManager {
         room.status = "finished";
         await this.saveRoom(room);
 
+        // Log game completion
+        await this.logGameEvent(roomId, 'game_won', {
+          winner: player.playerNumber,
+          winnerName: player.name,
+          finalBoard: room.board,
+          players: room.players,
+          moveCount: GameLogic.getMoveCount(room.board)
+        });
+
         // Emit game finished event
         this.emitToRoom(roomId, 'game-finished', {
           winner: player.playerNumber,
@@ -297,6 +325,14 @@ export class GameRoomManager {
       room.status = "finished";
       room.winner = 0;
       await this.saveRoom(room);
+
+      // Log game completion (draw)
+      await this.logGameEvent(roomId, 'game_draw', {
+        winner: 0,
+        finalBoard: room.board,
+        players: room.players,
+        moveCount: GameLogic.getMoveCount(room.board)
+      });
 
       // Emit game finished event (draw)
       this.emitToRoom(roomId, 'game-finished', {
