@@ -5,6 +5,7 @@ import { kv } from "@vercel/kv";
 // Access global io instance
 
 const USE_KV = process.env.KV_REST_API_URL ? true : false;
+console.log(`GameRoomManager: KV enabled: ${USE_KV}, KV_URL: ${process.env.KV_REST_API_URL ? 'set' : 'not set'}`);
 
 // In-memory cache for active games (shared across all requests to this server instance)
 const activeRoomsCache = new Map<string, { room: GameRoom; lastSaved: number }>();
@@ -48,16 +49,25 @@ export class GameRoomManager {
       createdAt: new Date(),
     };
 
+    console.log(`Creating room ${room.id} with key ${room.roomKey}`);
+
     // Always add to in-memory cache immediately
     activeRoomsCache.set(room.id, { room, lastSaved: Date.now() });
 
     // Also save to KV for persistence
     if (USE_KV) {
-      const expiry = 2592000; // 30 days
-      await kv.setex(`room:${room.id}`, expiry, JSON.stringify(room));
-      await kv.setex(`roomkey:${room.roomKey}`, expiry, room.id);
+      try {
+        const expiry = 2592000; // 30 days
+        await kv.setex(`room:${room.id}`, expiry, JSON.stringify(room));
+        await kv.setex(`roomkey:${room.roomKey}`, expiry, room.id);
+        console.log(`Room ${room.id} saved to KV successfully`);
+      } catch (error) {
+        console.error(`Failed to save room ${room.id} to KV:`, error);
+        throw error; // Re-throw so the API knows it failed
+      }
     } else {
       this.memoryRooms.set(room.id, room);
+      console.log(`Room ${room.id} saved to memory`);
     }
 
     return room;
@@ -95,34 +105,49 @@ export class GameRoomManager {
   }
 
   async getRoom(roomId: string): Promise<GameRoom | null> {
+    console.log(`Getting room ${roomId}, USE_KV: ${USE_KV}`);
+
     // Check in-memory cache first (fast, no KV calls)
     const cached = activeRoomsCache.get(roomId);
     if (cached) {
+      console.log(`Found room ${roomId} in cache`);
       return cached.room;
     }
+
+    console.log(`Room ${roomId} not in cache, checking KV`);
 
     // If not in cache, try KV for recovery
     if (USE_KV) {
       try {
         const roomData = await kv.get(`room:${roomId}`);
+        console.log(`KV get result for room:${roomId}:`, roomData ? 'found' : 'not found');
+
         if (roomData) {
           const room = JSON.parse(roomData as string);
+          console.log(`Parsed room data:`, room);
+
           // Validate room data structure
           if (room && room.id && room.players && room.board) {
             // Put it back in memory cache
             activeRoomsCache.set(roomId, { room, lastSaved: Date.now() });
+            console.log(`Room ${roomId} loaded from KV and cached`);
             return room;
           } else {
-            console.error(`Invalid room data structure for room ${roomId}`);
+            console.error(`Invalid room data structure for room ${roomId}:`, room);
             return null;
           }
+        } else {
+          console.log(`Room ${roomId} not found in KV`);
         }
       } catch (error) {
         console.error(`Error retrieving room ${roomId} from KV:`, error);
         return null;
       }
+    } else {
+      console.log('KV not enabled, checking memory rooms');
     }
 
+    console.log(`Room ${roomId} not found anywhere`);
     return null;
   }
 

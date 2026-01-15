@@ -8,8 +8,8 @@ import Board from "@/components/Board";
 import PlayerList from "@/components/PlayerList";
 import GameInfo from "@/components/GameInfo";
 
-const POLL_INTERVAL_FAST = 1000; // Poll every 1 second when it's your turn
-const POLL_INTERVAL_NORMAL = 2000; // Poll every 2 seconds normally
+const POLL_INTERVAL_FAST = 3000; // Poll every 3 seconds when it's your turn
+const POLL_INTERVAL_NORMAL = 5000; // Poll every 5 seconds normally
 
 export default function GamePage({ params }: { params: Promise<{ roomId: string }> }) {
   const [room, setRoom] = useState<GameRoom | null>(null);
