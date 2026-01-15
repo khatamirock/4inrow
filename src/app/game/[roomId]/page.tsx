@@ -36,6 +36,12 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
       const response = await axios.get(`/api/rooms/${resolvedParams.roomId}`);
       const newRoom = response.data.room;
 
+      if (!newRoom) {
+        setError("Room not found");
+        setLoading(false);
+        return;
+      }
+
       // Only update state if room data actually changed
       setRoom(prevRoom => {
         if (!prevRoom || JSON.stringify(prevRoom) !== JSON.stringify(newRoom)) {
@@ -47,23 +53,105 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
             setIsCurrentPlayer(playerInRoom.playerNumber === newRoom.currentPlayer);
           }
           setLoading(false);
+          setError(""); // Clear any previous errors
           return newRoom;
         }
         return prevRoom;
       });
     } catch (err: any) {
-      setError("Failed to load room");
+      console.error("Error fetching room:", err);
+      if (err.response?.status === 404) {
+        setError("Room not found");
+      } else if (err.response?.status === 500) {
+        setError("Server error - please try again");
+      } else {
+        setError("Connection failed - check your internet");
+      }
       setLoading(false);
     }
   }, [params, playerId]);
 
-  // Real-time connection effect (WebSocket for dev, polling for production)
+  // Real-time connection effect (try WebSocket first, fallback to polling)
   useEffect(() => {
-    const isProduction = process.env.NODE_ENV === 'production' || typeof window !== 'undefined' && window.location.hostname !== 'localhost';
+    const initConnection = async () => {
+      const resolvedParams = await params;
+      const isProduction = process.env.NODE_ENV === 'production' || typeof window !== 'undefined' && window.location.hostname !== 'localhost';
 
-    if (isProduction) {
-      // Production: Use polling (Vercel doesn't support WebSocket)
-      console.log('Using polling for real-time updates (production environment)');
+      // Try WebSocket connection first (works on Vercel too)
+      try {
+        console.log('Attempting WebSocket connection...');
+        const socketInstance = io(isProduction ? undefined : '/', {
+          transports: ['websocket', 'polling'], // Allow fallback to polling
+          timeout: 5000,
+        });
+
+        socketInstance.on('connect', () => {
+          console.log('Connected to server via WebSocket');
+          socketInstance.emit('join-room', resolvedParams.roomId);
+        });
+
+        socketInstance.on('room-joined', () => {
+          console.log('Joined room successfully');
+          fetchRoom(); // Initial room fetch
+        });
+
+        socketInstance.on('room-updated', (data) => {
+          console.log('Room updated via WebSocket:', data);
+          setRoom(data.room);
+
+          // Update current player status
+          const currentRoom = data.room;
+          const playerInRoom = currentRoom.players.find(
+            (p: any) => p.id === playerId
+          );
+          if (playerInRoom) {
+            setIsCurrentPlayer(playerInRoom.playerNumber === currentRoom.currentPlayer);
+          }
+        });
+
+        socketInstance.on('game-finished', (data) => {
+          console.log('Game finished via WebSocket:', data);
+          setRoom(data.room);
+          setIsCurrentPlayer(false); // Game is over
+        });
+
+        socketInstance.on('move-error', (data) => {
+          console.log('Move error via WebSocket:', data);
+          setError(data.message);
+        });
+
+        socketInstance.on('reset-error', (data) => {
+          console.log('Reset error via WebSocket:', data);
+          setError(data.message);
+        });
+
+        socketInstance.on('disconnect', (reason) => {
+          console.log('WebSocket disconnected:', reason);
+          // If WebSocket fails, fallback to polling
+          if (reason === 'io server disconnect' || reason === 'io client disconnect') {
+            console.log('Falling back to polling...');
+            startPolling();
+          }
+        });
+
+        socketInstance.on('connect_error', (error) => {
+          console.log('WebSocket connection failed, falling back to polling:', error);
+          startPolling();
+        });
+
+        setSocket(socketInstance);
+
+        return () => {
+          socketInstance.disconnect();
+        };
+      } catch (error) {
+        console.error('Failed to initialize WebSocket, using polling:', error);
+        startPolling();
+      }
+    };
+
+    const startPolling = () => {
+      console.log('Using polling for real-time updates');
       fetchRoom();
 
       let intervalId: NodeJS.Timeout;
@@ -95,85 +183,9 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
       return () => {
         if (intervalId) clearTimeout(intervalId);
       };
-    } else {
-      // Development: Use WebSocket
-      const initSocket = async () => {
-        try {
-          const resolvedParams = await params;
-          const socketInstance = io();
+    };
 
-          socketInstance.on('connect', () => {
-            console.log('Connected to server via WebSocket');
-            socketInstance.emit('join-room', resolvedParams.roomId);
-          });
-
-          socketInstance.on('room-joined', () => {
-            console.log('Joined room successfully');
-            fetchRoom(); // Initial room fetch
-          });
-
-          socketInstance.on('room-updated', (data) => {
-            console.log('Room updated via WebSocket:', data);
-            setRoom(data.room);
-
-            // Update current player status
-            const currentRoom = data.room;
-            const playerInRoom = currentRoom.players.find(
-              (p: any) => p.id === playerId
-            );
-            if (playerInRoom) {
-              setIsCurrentPlayer(playerInRoom.playerNumber === currentRoom.currentPlayer);
-            }
-          });
-
-          socketInstance.on('game-finished', (data) => {
-            console.log('Game finished via WebSocket:', data);
-            setRoom(data.room);
-            setIsCurrentPlayer(false); // Game is over
-          });
-
-          socketInstance.on('move-error', (data) => {
-            console.log('Move error via WebSocket:', data);
-            setError(data.message);
-          });
-
-          socketInstance.on('reset-error', (data) => {
-            console.log('Reset error via WebSocket:', data);
-            setError(data.message);
-          });
-
-          socketInstance.on('disconnect', () => {
-            console.log('Disconnected from WebSocket server');
-          });
-
-          setSocket(socketInstance);
-
-          return () => {
-            socketInstance.disconnect();
-          };
-        } catch (error) {
-          console.error('Failed to connect to WebSocket:', error);
-          // Fallback to polling if socket fails
-          fetchRoom();
-
-          let intervalId: NodeJS.Timeout;
-          const scheduleNextPoll = () => {
-            const pollInterval = isCurrentPlayer ? POLL_INTERVAL_FAST : POLL_INTERVAL_NORMAL;
-            intervalId = setTimeout(() => {
-              fetchRoom();
-              scheduleNextPoll();
-            }, pollInterval);
-          };
-          scheduleNextPoll();
-
-          return () => {
-            if (intervalId) clearTimeout(intervalId);
-          };
-        }
-      };
-
-      initSocket();
-    }
+    initConnection();
   }, [params, playerId, fetchRoom, isCurrentPlayer]);
 
   const handleMove = async (column: number) => {
@@ -181,31 +193,26 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
 
     try {
       const resolvedParams = await params;
-      const isProduction = process.env.NODE_ENV === 'production' || typeof window !== 'undefined' && window.location.hostname !== 'localhost';
 
-      // Emit move attempt via socket for real-time feedback (only in development)
-      if (socket && !isProduction) {
+      // Try WebSocket first if available
+      if (socket && socket.connected) {
         socket.emit('make-move', {
           roomId: resolvedParams.roomId,
           playerId,
           column,
         });
-      }
+      } else {
+        // Fallback to HTTP request
+        const response = await axios.post("/api/games/move", {
+          roomId: resolvedParams.roomId,
+          playerId,
+          column,
+        });
 
-      // Make HTTP request to process the move on server
-      const response = await axios.post("/api/games/move", {
-        roomId: resolvedParams.roomId,
-        playerId,
-        column,
-      });
-
-      // In production, manually update the room state from the response
-      if (isProduction && response.data.success) {
-        setRoom(response.data.room);
-      }
-
-      if (response.data.success) {
-        setError(""); // Clear any previous errors
+        if (response.data.success) {
+          setRoom(response.data.room);
+          setError(""); // Clear any previous errors
+        }
       }
     } catch (err: any) {
       setError(err.response?.data?.error || "Failed to make move");
@@ -215,27 +222,22 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
   const handleReset = async () => {
     try {
       const resolvedParams = await params;
-      const isProduction = process.env.NODE_ENV === 'production' || typeof window !== 'undefined' && window.location.hostname !== 'localhost';
 
-      // Emit reset via socket for real-time feedback (only in development)
-      if (socket && !isProduction) {
+      // Try WebSocket first if available
+      if (socket && socket.connected) {
         socket.emit('reset-game', {
           roomId: resolvedParams.roomId,
         });
-      }
+      } else {
+        // Fallback to HTTP request
+        const response = await axios.post("/api/games/reset", {
+          roomId: resolvedParams.roomId,
+        });
 
-      // Make HTTP request to reset the game on server
-      const response = await axios.post("/api/games/reset", {
-        roomId: resolvedParams.roomId,
-      });
-
-      // In production, manually update the room state from the response
-      if (isProduction && response.data.success) {
-        setRoom(response.data.room);
-      }
-
-      if (response.data.success) {
-        setError("");
+        if (response.data.success) {
+          setRoom(response.data.room);
+          setError(""); // Clear any previous errors
+        }
       }
     } catch (err: any) {
       setError("Failed to reset game");

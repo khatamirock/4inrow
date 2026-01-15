@@ -130,15 +130,25 @@ export class GameRoomManager {
     // Always save to in-memory cache (instant, shared across users)
     activeRoomsCache.set(room.id, { room, lastSaved: Date.now() });
 
-    // Save to KV periodically for persistence/recovery
-    const cached = activeRoomsCache.get(room.id)!;
-    const timeSinceLastSave = Date.now() - cached.lastSaved;
-    
-    if (USE_KV && timeSinceLastSave > CACHE_SAVE_INTERVAL) {
-      const expiry = 2592000; // 30 days
-      await kv.setex(`room:${room.id}`, expiry, JSON.stringify(room));
-      await kv.setex(`roomkey:${room.roomKey}`, expiry, room.id);
-      cached.lastSaved = Date.now();
+    // Save to KV more frequently for active games
+    if (USE_KV) {
+      const cached = activeRoomsCache.get(room.id)!;
+      const timeSinceLastSave = Date.now() - cached.lastSaved;
+
+      // Save immediately for active games (playing status) or every 30 seconds
+      const shouldSave = room.status === 'playing' || timeSinceLastSave > CACHE_SAVE_INTERVAL;
+
+      if (shouldSave) {
+        try {
+          const expiry = 2592000; // 30 days
+          await kv.setex(`room:${room.id}`, expiry, JSON.stringify(room));
+          await kv.setex(`roomkey:${room.roomKey}`, expiry, room.id);
+          cached.lastSaved = Date.now();
+        } catch (error) {
+          console.error(`Failed to save room ${room.id} to KV:`, error);
+          // Continue without throwing - room stays in memory cache
+        }
+      }
     }
   }
 
