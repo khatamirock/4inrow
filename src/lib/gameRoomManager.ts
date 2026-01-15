@@ -2,6 +2,7 @@ import { GameRoom } from "@/types/game";
 import { GameLogic } from "./gameLogic";
 import { kv } from "@vercel/kv";
 import { BlobStorage } from "./blobStorage";
+import { update } from "@vercel/edge-config";
 
 // Access global io instance
 
@@ -155,6 +156,23 @@ export class GameRoomManager {
   private async saveRoom(room: GameRoom): Promise<void> {
     // Always save to in-memory cache (instant, shared across users)
     activeRoomsCache.set(room.id, { room, lastSaved: Date.now() });
+
+    // Sync board state to Edge Config for fast global access
+    try {
+      const boardData = {
+        board: room.board,
+        currentPlayer: room.currentPlayer,
+        status: room.status,
+        winner: room.winner,
+        players: room.players,
+        lastUpdated: Date.now()
+      };
+      await update({ [`board:${room.id}`]: boardData });
+      console.log(`Board ${room.id} synced to Edge Config`);
+    } catch (error) {
+      console.error(`Failed to sync board ${room.id} to Edge Config:`, error);
+      // Continue without throwing - board stays in memory cache
+    }
 
     // Save to KV more frequently for active games
     if (USE_KV) {

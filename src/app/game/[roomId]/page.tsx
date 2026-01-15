@@ -33,6 +33,16 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
   const fetchRoom = useCallback(async () => {
     try {
       const resolvedParams = await params;
+
+      // Try to get board data from Edge Config first (fast)
+      let boardData = null;
+      try {
+        const boardResponse = await axios.get(`/api/boards/${resolvedParams.roomId}`);
+        boardData = boardResponse.data;
+      } catch (boardErr) {
+        console.log("Board data not available from Edge Config, falling back to room API");
+      }
+
       const response = await axios.get(`/api/rooms/${resolvedParams.roomId}`);
       const newRoom = response.data.room;
 
@@ -40,6 +50,15 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
         setError("Room not found");
         setLoading(false);
         return;
+      }
+
+      // Merge board data from Edge Config if available (faster updates)
+      if (boardData) {
+        newRoom.board = boardData.board;
+        newRoom.currentPlayer = boardData.currentPlayer;
+        newRoom.status = boardData.status;
+        newRoom.winner = boardData.winner;
+        newRoom.players = boardData.players;
       }
 
       // Only update state if room data actually changed
