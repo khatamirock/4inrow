@@ -67,12 +67,25 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
       fetchRoom();
 
       let intervalId: NodeJS.Timeout;
+      let consecutiveErrors = 0;
+      const MAX_CONSECUTIVE_ERRORS = 5;
 
       const scheduleNextPoll = () => {
         // Use faster polling when it's your turn, normal speed otherwise
         const pollInterval = isCurrentPlayer ? POLL_INTERVAL_FAST : POLL_INTERVAL_NORMAL;
-        intervalId = setTimeout(() => {
-          fetchRoom();
+        intervalId = setTimeout(async () => {
+          try {
+            await fetchRoom();
+            consecutiveErrors = 0; // Reset error count on success
+          } catch (err) {
+            consecutiveErrors++;
+            console.error(`Polling failed (${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS}):`, err);
+
+            if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+              setError("Connection lost. Please refresh the page.");
+              return; // Stop polling
+            }
+          }
           scheduleNextPoll(); // Schedule next poll
         }, pollInterval);
       };

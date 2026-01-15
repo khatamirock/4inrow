@@ -65,10 +65,25 @@ export class GameRoomManager {
 
   async getRoomByKey(roomKey: string): Promise<GameRoom | null> {
     if (USE_KV) {
-      const roomId = (await kv.get(`roomkey:${roomKey}`)) as string | null;
-      if (!roomId) return null;
-      const roomData = await kv.get(`room:${roomId}`);
-      return roomData ? JSON.parse(roomData as string) : null;
+      try {
+        const roomId = (await kv.get(`roomkey:${roomKey}`)) as string | null;
+        if (!roomId) return null;
+        const roomData = await kv.get(`room:${roomId}`);
+        if (roomData) {
+          const room = JSON.parse(roomData as string);
+          // Validate room data structure
+          if (room && room.id && room.players && room.board) {
+            return room;
+          } else {
+            console.error(`Invalid room data structure for room key ${roomKey}`);
+            return null;
+          }
+        }
+        return null;
+      } catch (error) {
+        console.error(`Error retrieving room by key ${roomKey} from KV:`, error);
+        return null;
+      }
     } else {
       for (const room of this.memoryRooms.values()) {
         if (room.roomKey === roomKey) {
@@ -88,12 +103,23 @@ export class GameRoomManager {
 
     // If not in cache, try KV for recovery
     if (USE_KV) {
-      const roomData = await kv.get(`room:${roomId}`);
-      if (roomData) {
-        const room = JSON.parse(roomData as string);
-        // Put it back in memory cache
-        activeRoomsCache.set(roomId, { room, lastSaved: Date.now() });
-        return room;
+      try {
+        const roomData = await kv.get(`room:${roomId}`);
+        if (roomData) {
+          const room = JSON.parse(roomData as string);
+          // Validate room data structure
+          if (room && room.id && room.players && room.board) {
+            // Put it back in memory cache
+            activeRoomsCache.set(roomId, { room, lastSaved: Date.now() });
+            return room;
+          } else {
+            console.error(`Invalid room data structure for room ${roomId}`);
+            return null;
+          }
+        }
+      } catch (error) {
+        console.error(`Error retrieving room ${roomId} from KV:`, error);
+        return null;
       }
     }
 
@@ -292,6 +318,31 @@ export class GameRoomManager {
       return [];
     } else {
       return Array.from(this.memoryRooms.values());
+    }
+  }
+
+  // Clean up inactive rooms (call this periodically)
+  async cleanupInactiveRooms(): Promise<void> {
+    const now = Date.now();
+    const INACTIVE_THRESHOLD = 24 * 60 * 60 * 1000; // 24 hours
+
+    if (USE_KV) {
+      // In KV mode, we can't easily list all rooms, so we rely on expiry
+      // Clean up in-memory cache for rooms that haven't been accessed recently
+      for (const [roomId, cached] of activeRoomsCache.entries()) {
+        if (now - cached.lastSaved > INACTIVE_THRESHOLD) {
+          activeRoomsCache.delete(roomId);
+        }
+      }
+    } else {
+      // In memory mode, clean up old rooms
+      for (const [roomId, room] of this.memoryRooms.entries()) {
+        const roomAge = now - new Date(room.createdAt).getTime();
+        if (roomAge > INACTIVE_THRESHOLD) {
+          this.memoryRooms.delete(roomId);
+          activeRoomsCache.delete(roomId);
+        }
+      }
     }
   }
 }

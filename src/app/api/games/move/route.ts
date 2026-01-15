@@ -12,6 +12,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Validate column range
+    if (column < 0 || column > 9) {
+      return NextResponse.json(
+        { error: "Invalid column number" },
+        { status: 400 }
+      );
+    }
+
     const result = await gameRoomManager.makeMove(roomId, playerId, column);
 
     if (!result.success) {
@@ -24,9 +32,9 @@ export async function POST(req: NextRequest) {
       room: result.room,
     });
   } catch (error) {
-    console.error(error);
+    console.error("Error in move API:", error);
     return NextResponse.json(
-      { error: "Failed to make move" },
+      { error: "Internal server error" },
       { status: 500 }
     );
   }
