@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { get } from "@vercel/edge-config";
 
 export async function GET(
-  req: NextRequest,
   { params }: { params: Promise<{ roomId: string }> }
 ) {
   try {
