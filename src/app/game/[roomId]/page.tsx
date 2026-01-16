@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
-import { io, Socket } from "socket.io-client";
 import { GameRoom } from "@/types/game";
 import Board from "@/components/Board";
 import PlayerList from "@/components/PlayerList";
@@ -15,7 +14,6 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
   const [room, setRoom] = useState<GameRoom | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [socket, setSocket] = useState<Socket | null>(null);
   const [playerId] = useState(() => {
     if (typeof window !== 'undefined') {
       let id = localStorage.getItem('playerId');
@@ -95,128 +93,54 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
     return true; // Return true to continue polling
   }, [params, playerId]);
 
-  // Real-time connection effect (try WebSocket first, fallback to polling)
+  // Polling-based room updates (Vercel serverless compatible)
   useEffect(() => {
-    const initConnection = async () => {
-      const resolvedParams = await params;
-      const isProduction = process.env.NODE_ENV === 'production' || typeof window !== 'undefined' && window.location.hostname !== 'localhost';
+    let intervalId: NodeJS.Timeout;
+    let consecutiveErrors = 0;
+    const MAX_CONSECUTIVE_ERRORS = 5;
+    let shouldStopPolling = false;
 
-      // Try WebSocket connection first (works on Vercel too)
-      try {
-        const socketInstance = io(isProduction ? undefined : '/', {
-          transports: ['websocket', 'polling'], // Allow fallback to polling
-          timeout: 5000,
-        });
+    const scheduleNextPoll = async () => {
+      if (shouldStopPolling) return;
 
-        socketInstance.on('connect', () => {
-          socketInstance.emit('join-room', resolvedParams.roomId);
-        });
+      // Use faster polling when it's your turn, normal speed otherwise
+      const pollInterval = isCurrentPlayer ? POLL_INTERVAL_FAST : POLL_INTERVAL_NORMAL;
+      const continuePolling = await fetchRoom();
 
-        socketInstance.on('room-joined', () => {
-          fetchRoom(); // Initial room fetch
-        });
-
-        socketInstance.on('room-updated', (data) => {
-          setRoom(data.room);
-
-          // Update current player status
-          const currentRoom = data.room;
-          const playerInRoom = currentRoom.players.find(
-            (p: any) => p.id === playerId
-          );
-          if (playerInRoom) {
-            setIsCurrentPlayer(playerInRoom.playerNumber === currentRoom.currentPlayer);
-          }
-          setError(""); // Clear errors on successful update
-        });
-
-        socketInstance.on('game-finished', (data) => {
-          setRoom(data.room);
-          setIsCurrentPlayer(false); // Game is over
-          setError(""); // Clear errors
-        });
-
-        socketInstance.on('move-error', (data) => {
-          setError(data.message);
-        });
-
-        socketInstance.on('reset-error', (data) => {
-          setError(data.message);
-        });
-
-        socketInstance.on('disconnect', (reason) => {
-          // If WebSocket fails, fallback to polling
-          if (reason === 'io server disconnect' || reason === 'io client disconnect') {
-            startPolling();
-          }
-        });
-
-        socketInstance.on('connect_error', () => {
-          startPolling();
-        });
-
-        setSocket(socketInstance);
-
-        return () => {
-          socketInstance.disconnect();
-        };
-      } catch (error) {
-        startPolling();
+      // Stop polling if room not found (404 error)
+      if (continuePolling === false) {
+        shouldStopPolling = true;
+        return;
       }
-    };
 
-    const startPolling = () => {
-      fetchRoom();
-
-      let intervalId: NodeJS.Timeout;
-      let consecutiveErrors = 0;
-      const MAX_CONSECUTIVE_ERRORS = 5;
-      let shouldStopPolling = false;
-
-      const scheduleNextPoll = async () => {
-        if (shouldStopPolling) return;
-        
-        // Use faster polling when it's your turn, normal speed otherwise
-        const pollInterval = isCurrentPlayer ? POLL_INTERVAL_FAST : POLL_INTERVAL_NORMAL;
-        const continuePolling = await fetchRoom();
-        
-        // Stop polling if room not found (404 error)
-        if (continuePolling === false) {
+      // Handle consecutive errors for other error types
+      if (continuePolling === true) {
+        consecutiveErrors = 0; // Reset error count on success
+      } else {
+        consecutiveErrors++;
+        if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+          setError("Connection lost. Please refresh the page.");
           shouldStopPolling = true;
           return;
         }
-        
-        // Handle consecutive errors for other error types
-        if (continuePolling === true) {
-          consecutiveErrors = 0; // Reset error count on success
-        } else {
-          consecutiveErrors++;
-          if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-            setError("Connection lost. Please refresh the page.");
-            shouldStopPolling = true;
-            return;
-          }
-        }
-        
-        intervalId = setTimeout(() => {
-          scheduleNextPoll(); // Schedule next poll
-        }, pollInterval);
-      };
+      }
 
-      // Initial fetch
-      fetchRoom().then(continuePolling => {
-        if (continuePolling !== false) {
-          scheduleNextPoll(); // Start the polling cycle
-        }
-      });
-
-      return () => {
-        shouldStopPolling = true;
-        if (intervalId) clearTimeout(intervalId);
-      };
+      intervalId = setTimeout(() => {
+        scheduleNextPoll(); // Schedule next poll
+      }, pollInterval);
     };
 
-    initConnection();
+    // Initial fetch and start polling
+    fetchRoom().then(continuePolling => {
+      if (continuePolling !== false) {
+        scheduleNextPoll(); // Start the polling cycle
+      }
+    });
+
+    return () => {
+      shouldStopPolling = true;
+      if (intervalId) clearTimeout(intervalId);
+    };
   }, [params, playerId, fetchRoom, isCurrentPlayer]);
 
   const handleMove = async (column: number) => {
@@ -225,25 +149,18 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
     try {
       const resolvedParams = await params;
 
-      // Try WebSocket first if available
-      if (socket && socket.connected) {
-        socket.emit('make-move', {
-          roomId: resolvedParams.roomId,
-          playerId,
-          column,
-        });
-      } else {
-        // Fallback to HTTP request
-        const response = await axios.post("/api/games/move", {
-          roomId: resolvedParams.roomId,
-          playerId,
-          column,
-        });
+      // Use HTTP request for moves
+      const response = await axios.post("/api/games/move", {
+        roomId: resolvedParams.roomId,
+        playerId,
+        column,
+      });
 
-        if (response.data.success) {
-          setRoom(response.data.room);
-          setError(""); // Clear any previous errors
-        }
+      if (response.data.success) {
+        setRoom(response.data.room);
+        setError(""); // Clear any previous errors
+      } else {
+        setError(response.data.error || "Failed to make move");
       }
     } catch (err: any) {
       setError(err.response?.data?.error || "Failed to make move");
@@ -254,21 +171,16 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
     try {
       const resolvedParams = await params;
 
-      // Try WebSocket first if available
-      if (socket && socket.connected) {
-        socket.emit('reset-game', {
-          roomId: resolvedParams.roomId,
-        });
-      } else {
-        // Fallback to HTTP request
-        const response = await axios.post("/api/games/reset", {
-          roomId: resolvedParams.roomId,
-        });
+      // Use HTTP request for game reset
+      const response = await axios.post("/api/games/reset", {
+        roomId: resolvedParams.roomId,
+      });
 
-        if (response.data.success) {
-          setRoom(response.data.room);
-          setError(""); // Clear any previous errors
-        }
+      if (response.data.success) {
+        setRoom(response.data.room);
+        setError(""); // Clear any previous errors
+      } else {
+        setError("Failed to reset game");
       }
     } catch (err: any) {
       setError("Failed to reset game");

@@ -15,11 +15,8 @@ const CACHE_SAVE_INTERVAL = 30000; // Save to KV every 30 seconds if room has ch
 export class GameRoomManager {
   private memoryRooms: Map<string, GameRoom> = new Map();
 
-  private emitToRoom(roomId: string, event: string, data: any) {
-    if ((globalThis as any).io) {
-      (globalThis as any).io.to(roomId).emit(event, data);
-    }
-  }
+  // Note: Socket.IO removed for Vercel serverless compatibility
+  // Real-time updates now handled via polling
 
   generateRoomKey(): string {
     return Math.floor(1000 + Math.random() * 9000).toString(); // 4-digit number (1000-9999)
@@ -285,9 +282,7 @@ export class GameRoomManager {
 
     await this.saveRoom(room);
 
-    // Emit room update to all players in the room
-    this.emitToRoom(roomId, 'room-updated', { room });
-
+    // Note: Real-time updates now handled via polling
     return { success: true, message: "Joined as player", room };
   }
 
@@ -359,12 +354,7 @@ export class GameRoomManager {
           moveCount: GameLogic.getMoveCount(room.board)
         });
 
-        // Emit game finished event
-        this.emitToRoom(roomId, 'game-finished', {
-          winner: player.playerNumber,
-          room
-        });
-
+        // Note: Real-time updates now handled via polling
         return {
           success: true,
           message: `Player ${player.playerNumber} wins!`,
@@ -386,12 +376,7 @@ export class GameRoomManager {
         moveCount: GameLogic.getMoveCount(room.board)
       });
 
-      // Emit game finished event (draw)
-      this.emitToRoom(roomId, 'game-finished', {
-        winner: 0,
-        room
-      });
-
+      // Note: Real-time updates now handled via polling
       return { success: true, message: "Draw!", room };
     }
 
@@ -400,9 +385,7 @@ export class GameRoomManager {
 
     await this.saveRoom(room);
 
-    // Emit room update to all players in the room
-    this.emitToRoom(roomId, 'room-updated', { room });
-
+    // Note: Real-time updates now handled via polling
     return { success: true, message: "Move made", room };
   }
 
@@ -421,9 +404,7 @@ export class GameRoomManager {
 
     await this.saveRoom(room);
 
-    // Emit room update to all players in the room
-    this.emitToRoom(roomId, 'room-updated', { room });
-
+    // Note: Real-time updates now handled via polling
     return { success: true, room };
   }
 
