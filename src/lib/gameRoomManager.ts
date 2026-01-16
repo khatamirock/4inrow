@@ -6,7 +6,8 @@ import { BlobStorage } from "./blobStorage";
 // Access global io instance
 
 const USE_KV = process.env.KV_REST_API_URL ? true : false;
-console.log(`GameRoomManager: KV enabled: ${USE_KV}, KV_URL: ${process.env.KV_REST_API_URL ? 'set' : 'not set'}`);
+const USE_EDGE_CONFIG = process.env.EDGE_CONFIG ? true : false;
+console.log(`GameRoomManager: KV enabled: ${USE_KV}, Edge Config enabled: ${USE_EDGE_CONFIG}`);
 
 // In-memory cache for active games (shared across all requests to this server instance)
 const activeRoomsCache = new Map<string, { room: GameRoom; lastSaved: number }>();
