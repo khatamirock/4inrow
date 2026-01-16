@@ -101,10 +101,8 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
       const resolvedParams = await params;
       const isProduction = process.env.NODE_ENV === 'production' || typeof window !== 'undefined' && window.location.hostname !== 'localhost';
 
-<<<<<<< HEAD
       // Try WebSocket connection first (works on Vercel too)
       try {
-        console.log('Attempting WebSocket connection...');
         const socketInstance = io(isProduction ? undefined : '/', {
           transports: ['websocket', 'polling'], // Allow fallback to polling
           timeout: 5000,
@@ -153,7 +151,7 @@ export default function GamePage({ params }: { params: Promise<{ roomId: string 
           }
         });
 
-        socketInstance.on('connect_error', (error) => {
+        socketInstance.on('connect_error', () => {
           startPolling();
         });
 
