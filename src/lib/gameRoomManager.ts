@@ -75,6 +75,13 @@ export class GameRoomManager {
   }
 
   async getRoomByKey(roomKey: string): Promise<GameRoom | null> {
+    // First check in-memory cache (fast, no KV calls)
+    for (const cached of activeRoomsCache.values()) {
+      if (cached.room.roomKey === roomKey) {
+        return cached.room;
+      }
+    }
+
     if (USE_KV) {
       try {
         const roomId = (await kv.get(`roomkey:${roomKey}`)) as string | null;
@@ -84,6 +91,8 @@ export class GameRoomManager {
           const room = JSON.parse(roomData as string);
           // Validate room data structure
           if (room && room.id && room.players && room.board) {
+            // Put it back in memory cache
+            activeRoomsCache.set(room.id, { room, lastSaved: Date.now() });
             return room;
           } else {
             console.error(`Invalid room data structure for room key ${roomKey}`);
@@ -96,8 +105,11 @@ export class GameRoomManager {
         return null;
       }
     } else {
+      // Check memoryRooms as fallback
       for (const room of this.memoryRooms.values()) {
         if (room.roomKey === roomKey) {
+          // Also add to cache
+          activeRoomsCache.set(room.id, { room, lastSaved: Date.now() });
           return room;
         }
       }
