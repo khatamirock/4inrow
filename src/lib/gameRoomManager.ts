@@ -149,7 +149,7 @@ export class GameRoomManager {
       try {
         const roomData = await get(`room:${roomId}`);
         if (roomData) {
-          const room = roomData as GameRoom;
+          const room = roomData as unknown as GameRoom;
           console.log(`Room ${roomId} loaded from Edge Config`);
 
           // Validate room data structure
