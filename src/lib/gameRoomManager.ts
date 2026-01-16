@@ -1,6 +1,7 @@
 import { GameRoom } from "@/types/game";
 import { GameLogic } from "./gameLogic";
 import { kv } from "@vercel/kv";
+import { get } from "@vercel/edge-config";
 import { BlobStorage } from "./blobStorage";
 
 // Access global io instance
