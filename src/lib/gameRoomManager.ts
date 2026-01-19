@@ -5,8 +5,12 @@ import { BlobStorage } from "./blobStorage";
 
 // Access global io instance
 
-const USE_KV = process.env.KV_REST_API_URL ? true : false;
-console.log(`GameRoomManager: KV enabled: ${USE_KV}, KV_URL: ${process.env.KV_REST_API_URL ? 'set' : 'not set'}`);
+const USE_KV = !!process.env.KV_REST_API_URL;
+console.log(`GameRoomManager: KV enabled: ${USE_KV}`);
+
+if (process.env.NODE_ENV === 'production' && !USE_KV) {
+  console.warn('⚠️ WARNING: Running in production without Vercel KV configured. Game rooms will be lost between serverless function invocations!');
+}
 
 // In-memory cache for active games (shared across all requests to this server instance)
 const activeRoomsCache = new Map<string, { room: GameRoom; lastSaved: number }>();
@@ -108,30 +112,19 @@ export class GameRoomManager {
   async getRoom(roomId: string): Promise<GameRoom | null> {
     console.log(`Getting room ${roomId}, USE_KV: ${USE_KV}`);
 
-    // Check in-memory cache first (fast, no KV calls)
-    const cached = activeRoomsCache.get(roomId);
-    if (cached) {
-      console.log(`Found room ${roomId} in cache`);
-      return cached.room;
-    }
-
-    console.log(`Room ${roomId} not in cache, checking KV`);
-
-    // If not in cache, try KV for recovery
+    // If KV is enabled, ALWAYS try to get the latest state from KV first
+    // This is crucial for serverless environments where memory is not shared
     if (USE_KV) {
       try {
         const roomData = await kv.get(`room:${roomId}`);
-        console.log(`KV get result for room:${roomId}:`, roomData ? 'found' : 'not found');
-
+        
         if (roomData) {
-          const room = JSON.parse(roomData as string);
-          console.log(`Parsed room data:`, room);
-
+          const room = typeof roomData === 'string' ? JSON.parse(roomData) : roomData as GameRoom;
+          
           // Validate room data structure
           if (room && room.id && room.players && room.board) {
-            // Put it back in memory cache
+            // Update in-memory cache with latest data
             activeRoomsCache.set(roomId, { room, lastSaved: Date.now() });
-            console.log(`Room ${roomId} loaded from KV and cached`);
             return room;
           } else {
             console.error(`Invalid room data structure for room ${roomId}:`, room);
@@ -142,10 +135,18 @@ export class GameRoomManager {
         }
       } catch (error) {
         console.error(`Error retrieving room ${roomId} from KV:`, error);
-        return null;
+        // Fall back to memory cache if KV fails
       }
-    } else {
-      console.log('KV not enabled, checking memory rooms');
+    }
+
+    // Check in-memory cache (fallback for KV error or primary for local dev)
+    const cached = activeRoomsCache.get(roomId);
+    if (cached) {
+      return cached.room;
+    }
+
+    if (!USE_KV) {
+       console.log('KV not enabled and room not in memory');
     }
 
     console.log(`Room ${roomId} not found anywhere`);
