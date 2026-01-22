@@ -1,15 +1,17 @@
 import { GameRoom } from "@/types/game";
 import { GameLogic } from "./gameLogic";
 import { kv } from "@vercel/kv";
+import { get } from "@vercel/edge-config";
 import { BlobStorage } from "./blobStorage";
 
 // Access global io instance
 
 const USE_KV = !!process.env.KV_REST_API_URL;
-console.log(`GameRoomManager: KV enabled: ${USE_KV}`);
+const USE_EDGE_CONFIG = !!process.env.EDGE_CONFIG;
+console.log(`GameRoomManager: KV enabled: ${USE_KV}, Edge Config enabled: ${USE_EDGE_CONFIG}`);
 
-if (process.env.NODE_ENV === 'production' && !USE_KV) {
-  console.warn('⚠️ WARNING: Running in production without Vercel KV configured. Game rooms will be lost between serverless function invocations!');
+if (process.env.NODE_ENV === 'production' && !USE_KV && !USE_EDGE_CONFIG) {
+  console.warn('⚠️ WARNING: Running in production without Vercel KV or Edge Config. Game rooms will be lost between serverless function invocations!');
 }
 
 // In-memory cache for active games (shared across all requests to this server instance)
@@ -19,11 +21,8 @@ const CACHE_SAVE_INTERVAL = 30000; // Save to KV every 30 seconds if room has ch
 export class GameRoomManager {
   private memoryRooms: Map<string, GameRoom> = new Map();
 
-  private emitToRoom(roomId: string, event: string, data: any) {
-    if ((globalThis as any).io) {
-      (globalThis as any).io.to(roomId).emit(event, data);
-    }
-  }
+  // Note: Socket.IO removed for Vercel serverless compatibility
+  // Real-time updates now handled via polling
 
   generateRoomKey(): string {
     return Math.floor(1000 + Math.random() * 9000).toString(); // 4-digit number (1000-9999)
@@ -33,7 +32,7 @@ export class GameRoomManager {
     return `room_${Date.now()}_${Math.random().toString(36).substring(7)}`;
   }
 
-  async createRoom(hostId: string, hostName: string): Promise<GameRoom> {
+  async createRoom(hostId: string, hostName: string, winningLength: number = 4): Promise<GameRoom> {
     const room: GameRoom = {
       id: this.generateRoomId(),
       roomKey: this.generateRoomKey(),
@@ -51,6 +50,7 @@ export class GameRoomManager {
       status: "waiting",
       winner: null,
       maxPlayers: 3,
+      winningLength,
       createdAt: new Date(),
     };
 
@@ -79,6 +79,25 @@ export class GameRoomManager {
   }
 
   async getRoomByKey(roomKey: string): Promise<GameRoom | null> {
+    // First check in-memory cache (fast, no external calls)
+    for (const cached of activeRoomsCache.values()) {
+      if (cached.room.roomKey === roomKey) {
+        return cached.room;
+      }
+    }
+
+    // Try Edge Config first
+    if (USE_EDGE_CONFIG) {
+      try {
+        // We need to find the room ID first - this is a limitation of Edge Config
+        // In a real implementation, you'd maintain a separate index
+        // For now, we'll skip Edge Config for key lookup and rely on KV
+      } catch (error) {
+        console.error(`Error retrieving room by key ${roomKey} from Edge Config:`, error);
+      }
+    }
+
+    // Try KV for key lookup
     if (USE_KV) {
       try {
         const roomId = (await kv.get(`roomkey:${roomKey}`)) as string | null;
@@ -88,6 +107,8 @@ export class GameRoomManager {
           const room = JSON.parse(roomData as string);
           // Validate room data structure
           if (room && room.id && room.players && room.board) {
+            // Put it back in memory cache
+            activeRoomsCache.set(room.id, { room, lastSaved: Date.now() });
             return room;
           } else {
             console.error(`Invalid room data structure for room key ${roomKey}`);
@@ -99,28 +120,64 @@ export class GameRoomManager {
         console.error(`Error retrieving room by key ${roomKey} from KV:`, error);
         return null;
       }
-    } else {
+    }
+
+    // Fallback to in-memory storage (serverless incompatible)
+    if (!USE_KV && !USE_EDGE_CONFIG) {
+      console.log('Neither KV nor Edge Config enabled, checking in-memory storage (serverless incompatible)');
       for (const room of this.memoryRooms.values()) {
         if (room.roomKey === roomKey) {
+          // Also add to cache
+          activeRoomsCache.set(room.id, { room, lastSaved: Date.now() });
           return room;
         }
       }
-      return null;
     }
+
+    return null;
   }
 
   async getRoom(roomId: string): Promise<GameRoom | null> {
-    console.log(`Getting room ${roomId}, USE_KV: ${USE_KV}`);
+    console.log(`Getting room ${roomId}, USE_KV: ${USE_KV}, USE_EDGE_CONFIG: ${USE_EDGE_CONFIG}`);
 
-    // If KV is enabled, ALWAYS try to get the latest state from KV first
+    // If KV/Edge is enabled, ALWAYS try to get the latest state from remote storage first
     // This is crucial for serverless environments where memory is not shared
+
+    console.log(`Room ${roomId} checking persistent storage first`);
+
+    // Try Edge Config first (faster for reads)
+    if (USE_EDGE_CONFIG) {
+      try {
+        const roomData = await get(`room:${roomId}`);
+        if (roomData) {
+          const room = roomData as unknown as GameRoom;
+          console.log(`Room ${roomId} loaded from Edge Config`);
+
+          // Validate room data structure
+          if (room && room.id && room.players && room.board) {
+            // Put it back in memory cache
+            activeRoomsCache.set(roomId, { room, lastSaved: Date.now() });
+            console.log(`Room ${roomId} loaded from Edge Config and cached`);
+            return room;
+          } else {
+            console.error(`Invalid room data structure for room ${roomId}:`, room);
+            return null;
+          }
+        }
+      } catch (error) {
+        console.error(`Error retrieving room ${roomId} from Edge Config:`, error);
+        // Continue to try KV
+      }
+    }
+
+    // If not in Edge Config (or disabled), try KV
     if (USE_KV) {
       try {
         const roomData = await kv.get(`room:${roomId}`);
-        
+
         if (roomData) {
           const room = typeof roomData === 'string' ? JSON.parse(roomData) : roomData as GameRoom;
-          
+
           // Validate room data structure
           if (room && room.id && room.players && room.board) {
             // Update in-memory cache with latest data
@@ -142,14 +199,24 @@ export class GameRoomManager {
     // Check in-memory cache (fallback for KV error or primary for local dev)
     const cached = activeRoomsCache.get(roomId);
     if (cached) {
+      console.log(`Found room ${roomId} in cache (fallback)`);
       return cached.room;
     }
 
-    if (!USE_KV) {
-       console.log('KV not enabled and room not in memory');
+    // If neither Edge Config nor KV are available, check in-memory storage as fallback
+    // Note: This won't work in serverless environments for cross-request persistence
+    if (!USE_KV && !USE_EDGE_CONFIG) {
+      console.log('Neither KV nor Edge Config enabled, checking in-memory storage (serverless incompatible)');
+      const room = this.memoryRooms.get(roomId);
+      if (room) {
+        // Put it in cache too
+        activeRoomsCache.set(roomId, { room, lastSaved: Date.now() });
+        console.log(`Room ${roomId} found in memory (temporary - will be lost)`);
+        return room;
+      }
     }
 
-    console.log(`Room ${roomId} not found anywhere`);
+    console.log(`Room ${roomId} not found in any storage`);
     return null;
   }
 
@@ -157,47 +224,57 @@ export class GameRoomManager {
     // Always save to in-memory cache (instant, shared across users)
     activeRoomsCache.set(room.id, { room, lastSaved: Date.now() });
 
-    // Sync board state to Edge Config for fast global access
-    try {
-      const boardData = {
-        board: room.board,
-        currentPlayer: room.currentPlayer,
-        status: room.status,
-        winner: room.winner,
-        players: room.players,
-        lastUpdated: Date.now()
-      };
+    // Try to save to Edge Config first (for board data)
+    if (USE_EDGE_CONFIG) {
+      try {
+        const boardData = {
+          board: room.board,
+          currentPlayer: room.currentPlayer,
+          status: room.status,
+          winner: room.winner,
+          players: room.players,
+          lastUpdated: Date.now()
+        };
 
-      // Use Edge Config REST API to update (requires EDGE_CONFIG_ACCESS_TOKEN)
-      const edgeConfigToken = process.env.EDGE_CONFIG_ACCESS_TOKEN;
-      if (edgeConfigToken) {
-        const response = await fetch(`https://api.vercel.com/v1/edge-config/${process.env.EDGE_CONFIG}/items`, {
-          method: 'PATCH',
-          headers: {
-            'Authorization': `Bearer ${edgeConfigToken}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            items: [{
-              operation: 'upsert',
-              key: `board:${room.id}`,
-              value: boardData
-            }]
-          })
-        });
+        // Use Edge Config REST API to update (requires EDGE_CONFIG_ACCESS_TOKEN)
+        const edgeConfigToken = process.env.EDGE_CONFIG_ACCESS_TOKEN;
+        if (edgeConfigToken) {
+          const response = await fetch(`https://api.vercel.com/v1/edge-config/${process.env.EDGE_CONFIG}/items`, {
+            method: 'PATCH',
+            headers: {
+              'Authorization': `Bearer ${edgeConfigToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              items: [
+                {
+                  operation: 'upsert',
+                  key: `board:${room.id}`,
+                  value: boardData
+                },
+                {
+                  operation: 'upsert',
+                  key: `room:${room.id}`,
+                  value: room
+                }
+              ]
+            })
+          });
 
-        if (response.ok) {
-          console.log(`Board ${room.id} synced to Edge Config`);
-        } else {
-          console.error(`Failed to sync board ${room.id} to Edge Config:`, response.statusText);
+          if (response.ok) {
+            console.log(`Room ${room.id} synced to Edge Config`);
+            // Continue to also save to KV for redundancy/fallback
+          } else {
+            console.error(`Failed to sync room ${room.id} to Edge Config:`, response.statusText);
+          }
         }
+      } catch (error) {
+        console.error(`Failed to sync room ${room.id} to Edge Config:`, error);
+        // Continue to try KV
       }
-    } catch (error) {
-      console.error(`Failed to sync board ${room.id} to Edge Config:`, error);
-      // Continue without throwing - board stays in memory cache
     }
 
-    // Save to KV more frequently for active games
+    // If Edge Config failed or not available, try KV
     if (USE_KV) {
       const cached = activeRoomsCache.get(room.id)!;
       const timeSinceLastSave = Date.now() - cached.lastSaved;
@@ -211,11 +288,16 @@ export class GameRoomManager {
           await kv.setex(`room:${room.id}`, expiry, JSON.stringify(room));
           await kv.setex(`roomkey:${room.roomKey}`, expiry, room.id);
           cached.lastSaved = Date.now();
+          console.log(`Room ${room.id} saved to KV`);
         } catch (error) {
           console.error(`Failed to save room ${room.id} to KV:`, error);
           // Continue without throwing - room stays in memory cache
         }
       }
+    } else if (!USE_EDGE_CONFIG) {
+      // Neither KV nor Edge Config available - room only exists in memory
+      console.log(`Room ${room.id} saved to memory only (serverless incompatible - will be lost)`);
+      this.memoryRooms.set(room.id, room);
     }
   }
 
@@ -274,9 +356,7 @@ export class GameRoomManager {
 
     await this.saveRoom(room);
 
-    // Emit room update to all players in the room
-    this.emitToRoom(roomId, 'room-updated', { room });
-
+    // Note: Real-time updates now handled via polling
     return { success: true, message: "Joined as player", room };
   }
 
@@ -332,7 +412,8 @@ export class GameRoomManager {
           room.board,
           moveResult.row,
           column,
-          player.playerNumber
+          player.playerNumber,
+          room.winningLength
         )
       ) {
         room.winner = player.playerNumber;
@@ -348,12 +429,7 @@ export class GameRoomManager {
           moveCount: GameLogic.getMoveCount(room.board)
         });
 
-        // Emit game finished event
-        this.emitToRoom(roomId, 'game-finished', {
-          winner: player.playerNumber,
-          room
-        });
-
+        // Note: Real-time updates now handled via polling
         return {
           success: true,
           message: `Player ${player.playerNumber} wins!`,
@@ -375,12 +451,7 @@ export class GameRoomManager {
         moveCount: GameLogic.getMoveCount(room.board)
       });
 
-      // Emit game finished event (draw)
-      this.emitToRoom(roomId, 'game-finished', {
-        winner: 0,
-        room
-      });
-
+      // Note: Real-time updates now handled via polling
       return { success: true, message: "Draw!", room };
     }
 
@@ -389,9 +460,7 @@ export class GameRoomManager {
 
     await this.saveRoom(room);
 
-    // Emit room update to all players in the room
-    this.emitToRoom(roomId, 'room-updated', { room });
-
+    // Note: Real-time updates now handled via polling
     return { success: true, message: "Move made", room };
   }
 
@@ -410,9 +479,7 @@ export class GameRoomManager {
 
     await this.saveRoom(room);
 
-    // Emit room update to all players in the room
-    this.emitToRoom(roomId, 'room-updated', { room });
-
+    // Note: Real-time updates now handled via polling
     return { success: true, room };
   }
 

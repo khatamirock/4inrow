@@ -14,7 +14,6 @@ export async function GET() {
 
     // Test Edge Config connection
     const testKey = `test_${Date.now()}`;
-    const testValue = { message: "Edge Config is working!", timestamp: new Date().toISOString() };
 
     // Test setting data (this would normally be done via update function)
     // For testing, we'll just try to get a non-existent key

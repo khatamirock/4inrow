@@ -10,6 +10,7 @@ export interface GameRoom {
   status: "waiting" | "playing" | "finished";
   winner: number | null;
   maxPlayers: number;
+  winningLength: number;
   createdAt: Date;
 }
 

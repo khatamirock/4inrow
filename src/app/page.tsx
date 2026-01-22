@@ -18,6 +18,7 @@ export default function Home() {
   });
   const [playerName, setPlayerName] = useState("");
   const [roomKey, setRoomKey] = useState("");
+  const [winningLength, setWinningLength] = useState(4);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
@@ -35,6 +36,7 @@ export default function Home() {
       const response = await axios.post("/api/rooms/create", {
         hostId: playerId,
         hostName: playerName,
+        winningLength,
       });
 
       const { room } = response.data;
@@ -105,6 +107,46 @@ export default function Home() {
                 if (e.key === "Enter") handleCreateRoom();
               }}
             />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', color: '#d1d5db', marginBottom: '8px' }}>
+              Win Condition
+            </label>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                onClick={() => setWinningLength(3)}
+                style={{
+                  flex: 1,
+                  padding: '12px 16px',
+                  borderRadius: '8px',
+                  border: winningLength === 3 ? '2px solid #60a5fa' : '2px solid #374151',
+                  background: winningLength === 3 ? '#1e3a5f' : '#111827',
+                  color: winningLength === 3 ? '#60a5fa' : '#9ca3af',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                Connect 3
+              </button>
+              <button
+                onClick={() => setWinningLength(4)}
+                style={{
+                  flex: 1,
+                  padding: '12px 16px',
+                  borderRadius: '8px',
+                  border: winningLength === 4 ? '2px solid #60a5fa' : '2px solid #374151',
+                  background: winningLength === 4 ? '#1e3a5f' : '#111827',
+                  color: winningLength === 4 ? '#60a5fa' : '#9ca3af',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                Connect 4
+              </button>
+            </div>
           </div>
 
           <button
@@ -179,7 +221,7 @@ export default function Home() {
         <div style={{ textAlign: 'center', color: '#9ca3af', fontSize: '14px' }}>
           <p>🎮 Play with up to 3 players</p>
           <p>👁️ Others can spectate</p>
-          <p>🏆 First to 4 in a row wins!</p>
+          <p>🏆 First to connect 3 or 4 wins!</p>
         </div>
       </div>
     </div>

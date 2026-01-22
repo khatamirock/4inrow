@@ -1,7 +1,6 @@
 // Game logic for 3 in a row (3-player game)
 export const BOARD_ROWS = 10;
 export const BOARD_COLS = 10;
-export const WIN_LENGTH = 3;
 
 export class GameLogic {
   static createBoard(): (number | null)[][] {
@@ -34,25 +33,26 @@ export class GameLogic {
     board: (number | null)[][],
     row: number,
     col: number,
-    playerNumber: number
+    playerNumber: number,
+    winLength: number = 4
   ): boolean {
     // Check horizontal
-    if (this.checkDirection(board, row, col, playerNumber, 0, 1)) {
+    if (this.checkDirection(board, row, col, playerNumber, 0, 1, winLength)) {
       return true;
     }
 
     // Check vertical
-    if (this.checkDirection(board, row, col, playerNumber, 1, 0)) {
+    if (this.checkDirection(board, row, col, playerNumber, 1, 0, winLength)) {
       return true;
     }
 
     // Check diagonal (top-left to bottom-right)
-    if (this.checkDirection(board, row, col, playerNumber, 1, 1)) {
+    if (this.checkDirection(board, row, col, playerNumber, 1, 1, winLength)) {
       return true;
     }
 
     // Check diagonal (top-right to bottom-left)
-    if (this.checkDirection(board, row, col, playerNumber, 1, -1)) {
+    if (this.checkDirection(board, row, col, playerNumber, 1, -1, winLength)) {
       return true;
     }
 
@@ -65,7 +65,8 @@ export class GameLogic {
     col: number,
     playerNumber: number,
     rowDir: number,
-    colDir: number
+    colDir: number,
+    winLength: number
   ): boolean {
     let count = 1;
 
@@ -99,7 +100,7 @@ export class GameLogic {
       c -= colDir;
     }
 
-    return count >= WIN_LENGTH;
+    return count >= winLength;
   }
 
   static isBoardFull(board: (number | null)[][]): boolean {

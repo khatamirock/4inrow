@@ -3,8 +3,8 @@ import { gameRoomManager } from "@/lib/gameRoomManager";
 
 export async function POST(req: NextRequest) {
   try {
-    const { hostId, hostName } = await req.json();
-    console.log(`API: Creating room for host ${hostId} (${hostName})`);
+    const { hostId, hostName, winningLength = 4 } = await req.json();
+    console.log(`API: Creating room for host ${hostId} (${hostName}) with winning length ${winningLength}`);
 
     if (!hostId || !hostName) {
       return NextResponse.json(
@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const room = await gameRoomManager.createRoom(hostId, hostName);
+    const room = await gameRoomManager.createRoom(hostId, hostName, winningLength);
     console.log(`API: Room created successfully: ${room.id} with key ${room.roomKey}`);
 
     return NextResponse.json({
