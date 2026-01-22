@@ -4,11 +4,11 @@ A real-time multiplayer Connect-4 style game built with Next.js, Socket.io, and 
 
 ## Features
 
-- 🎮 **3-Player Gameplay**: Connect-4 mechanics adapted for 3 players
+- 🎮 **3-Player Gameplay**: Connect-4 mechanics adapted for 3 players  
 - 🔐 **Room System**: Create or join games using 3-digit room codes (000-999)
 - ⚡ **Real-time**: Powered by Socket.io for instant updates
 - 🎨 **Modern UI**: Beautiful gradients, smooth animations, and responsive design
-- 🚀 **Vercel Ready**: Optimized for Vercel deployment
+- 🚀 **Vercel Ready**: Optimized for Vercel deployment with API routes
 
 ## Getting Started
 
@@ -58,41 +58,47 @@ npm start
 
 ## Deploying to Vercel
 
-### Option 1: Vercel CLI
+### Option 1: GitHub Integration (Recommended)
 
-1. Install Vercel CLI:
+1. Push your code to GitHub:
 ```bash
+git init
+git add .
+git commit -m "Initial commit: 4-in-a-row game"
+git remote add origin <your-repo-url>
+git push -u origin main
+```
+
+2. Go to [vercel.com](https://vercel.com) and sign in
+3. Click "New Project" and import your GitHub repository
+4. Vercel will auto-detect Next.js settings
+5. Click "Deploy" - your app will be live in seconds!
+
+### Option 2: Vercel CLI
+
+```bash
+# Install Vercel CLI globally
 npm install -g vercel
-```
 
-2. Deploy:
-```bash
+# Deploy from project directory
 vercel
+
+# Follow the prompts
 ```
 
-3. Follow the prompts and your app will be live!
+### Important: Vercel Configuration
 
-### Option 2: Vercel Dashboard
+This app uses **Socket.io with API routes** for Vercel compatibility. The Socket.io server runs on `/api/socket` as a Next.js API route, which works perfectly with Vercel's serverless functions.
 
-1. Push your code to GitHub
-2. Go to [vercel.com](https://vercel.com)
-3. Import your GitHub repository
-4. Vercel will automatically detect Next.js and deploy
-
-### Important Notes for Vercel
-
-- The app uses a custom server (`server.js`) for Socket.io integration
-- WebSocket connections are supported on Vercel with proper configuration
-- The `vercel.json` file is already configured for optimal deployment
-- No environment variables required for basic setup
+No environment variables or special configuration needed!
 
 ## Tech Stack
 
 - **Frontend**: Next.js 14, React 18, TypeScript
-- **Backend**: Custom Node.js server with Socket.io
+- **Backend**: Next.js API Routes with Socket.io
 - **Styling**: CSS with modern gradients and animations
-- **Real-time**: Socket.io for WebSocket communication
-- **Deployment**: Vercel-compatible configuration
+- **Real-time**: Socket.io (API route compatible)
+- **Deployment**: Vercel-optimized
 
 ## Project Structure
 
@@ -103,27 +109,52 @@ vercel
 │   │   ├── page.tsx          # Main game component
 │   │   ├── layout.tsx        # Root layout
 │   │   └── globals.css       # Global styles
+│   ├── pages/
+│   │   └── api/
+│   │       └── socket.ts     # Socket.io API route
 │   └── types/
-│       └── game.ts           # TypeScript interfaces
-├── server.js                 # Custom Socket.io server
+│       ├── game.ts           # Game type definitions
+│       └── socket.ts         # Socket type definitions
 ├── package.json
 ├── tsconfig.json
 ├── next.config.js
 └── vercel.json              # Vercel configuration
 ```
 
+## How It Works
+
+### Socket.io on Vercel
+
+Unlike traditional Socket.io setups that require a persistent server, this implementation uses:
+
+1. **API Route**: `/api/socket.ts` initializes Socket.io server
+2. **Client Connection**: Connects to `/api/socket` path
+3. **Stateful Server**: Socket.io maintains connections even on serverless
+
+This approach is fully compatible with Vercel's infrastructure!
+
 ## Troubleshooting
 
-### Port Already in Use
-If port 3000 is already in use:
-```bash
-PORT=3001 npm run dev
-```
+### Socket.io Not Connecting
 
-### WebSocket Connection Issues
-- Ensure no firewall is blocking WebSocket connections
-- On Vercel, WebSocket connections should work automatically
-- Check browser console for connection errors
+If you see 404 errors for `/socket.io`:
+- Make sure you've pushed the latest code
+- Verify `/src/pages/api/socket.ts` exists
+- Redeploy on Vercel
+
+### Local Development Issues
+
+```bash
+# Clear Next.js cache
+rm -rf .next
+
+# Reinstall dependencies
+rm -rf node_modules
+npm install
+
+# Restart dev server
+npm run dev
+```
 
 ## Future Enhancements
 

@@ -17,26 +17,47 @@ export default function Home() {
     const [gameOver, setGameOver] = useState<{ winner: number | 'draw', winnerName?: string } | null>(null);
 
     useEffect(() => {
-        const newSocket = io();
-        setSocket(newSocket);
+        // Initialize socket connection
+        const socketInitializer = async () => {
+            // Call the API route to initialize Socket.io
+            await fetch('/api/socket');
 
-        newSocket.on('roomUpdate', (updatedRoom: Room) => {
-            setRoom(updatedRoom);
-            if (updatedRoom.gameStarted && gameState === 'waiting') {
-                setGameState('playing');
-            }
-        });
+            const newSocket = io({
+                path: '/api/socket',
+            });
 
-        newSocket.on('gameOver', (data: { winner: number | 'draw', winnerName?: string }) => {
-            setGameOver(data);
-        });
+            newSocket.on('connect', () => {
+                console.log('Connected to server');
+            });
 
-        newSocket.on('playerLeft', () => {
-            setError('A player has left the game');
-        });
+            newSocket.on('connect_error', (error) => {
+                console.error('Connection error:', error);
+            });
+
+            setSocket(newSocket);
+
+            newSocket.on('roomUpdate', (updatedRoom: Room) => {
+                setRoom(updatedRoom);
+                if (updatedRoom.gameStarted && gameState === 'waiting') {
+                    setGameState('playing');
+                }
+            });
+
+            newSocket.on('gameOver', (data: { winner: number | 'draw', winnerName?: string }) => {
+                setGameOver(data);
+            });
+
+            newSocket.on('playerLeft', () => {
+                setError('A player has left the game');
+            });
+        };
+
+        socketInitializer();
 
         return () => {
-            newSocket.close();
+            if (socket) {
+                socket.close();
+            }
         };
     }, []);
 
