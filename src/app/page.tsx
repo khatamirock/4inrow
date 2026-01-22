@@ -255,8 +255,6 @@ export default function Home() {
                 setGameOver({ winner: 'draw' });
             } else {
                 // Next turn
-            } else {
-                // Next turn
                 updatedRoom.currentTurn = (room.currentTurn % (room.maxPlayers || 3)) + 1;
             }
         }
