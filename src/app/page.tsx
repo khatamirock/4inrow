@@ -176,6 +176,13 @@ export default function Home() {
             currentRoom.gameStarted = true;
         }
 
+        // Save updated room state to server
+        await fetch(`/api/room/${roomCode}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(currentRoom)
+        });
+
         setMyPlayerNumber(playerNumber);
         setRoom(currentRoom);
         setGameState(currentRoom.gameStarted ? 'playing' : 'waiting');
