@@ -11,6 +11,8 @@ export interface Room {
     currentTurn: number;
     gameStarted: boolean;
     winner: number | 'draw' | null;
+    maxPlayers: number;
+    winCondition: number;
 }
 
 export type CellValue = number | null;

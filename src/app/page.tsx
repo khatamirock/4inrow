@@ -15,6 +15,8 @@ export default function Home() {
     const [myPlayerNumber, setMyPlayerNumber] = useState<number | null>(null);
     const [error, setError] = useState('');
     const [gameOver, setGameOver] = useState<{ winner: number | 'draw', winnerName?: string } | null>(null);
+    const [numPlayers, setNumPlayers] = useState<number>(2);
+    const [winCondition, setWinCondition] = useState<number>(4);
 
     useEffect(() => {
         const pusherClient = new Pusher(process.env.NEXT_PUBLIC_PUSHER_KEY!, {
@@ -42,30 +44,31 @@ export default function Home() {
     const checkWin = (board: (number | null)[][], row: number, col: number, player: number) => {
         const rows = 6;
         const cols = 7;
+        const winNeeded = room?.winCondition || 4;
 
         // Check horizontal
         let count = 1;
         for (let c = col - 1; c >= 0 && board[row][c] === player; c--) count++;
         for (let c = col + 1; c < cols && board[row][c] === player; c++) count++;
-        if (count >= 4) return true;
+        if (count >= winNeeded) return true;
 
         // Check vertical
         count = 1;
         for (let r = row - 1; r >= 0 && board[r][col] === player; r--) count++;
         for (let r = row + 1; r < rows && board[r][col] === player; r++) count++;
-        if (count >= 4) return true;
+        if (count >= winNeeded) return true;
 
         // Check diagonal (top-left to bottom-right)
         count = 1;
         for (let r = row - 1, c = col - 1; r >= 0 && c >= 0 && board[r][c] === player; r--, c--) count++;
         for (let r = row + 1, c = col + 1; r < rows && c < cols && board[r][c] === player; r++, c++) count++;
-        if (count >= 4) return true;
+        if (count >= winNeeded) return true;
 
         // Check diagonal (top-right to bottom-left)
         count = 1;
         for (let r = row - 1, c = col + 1; r >= 0 && c < cols && board[r][c] === player; r--, c++) count++;
         for (let r = row + 1, c = col - 1; r < rows && c >= 0 && board[r][c] === player; r++, c--) count++;
-        if (count >= 4) return true;
+        if (count >= winNeeded) return true;
 
         return false;
     };
@@ -87,7 +90,9 @@ export default function Home() {
             board: Array(6).fill(null).map(() => Array(7).fill(null)),
             currentTurn: 1,
             gameStarted: false,
-            winner: null
+            winner: null,
+            maxPlayers: numPlayers,
+            winCondition: winCondition
         };
 
         setRoomCode(code);
@@ -154,7 +159,7 @@ export default function Home() {
 
         const currentRoom: Room = await response.json();
 
-        if (currentRoom.players.length >= 3) {
+        if (currentRoom.players.length >= (currentRoom.maxPlayers || 3)) {
             setError('Room is full');
             return;
         }
@@ -172,7 +177,7 @@ export default function Home() {
         };
 
         currentRoom.players.push(newPlayer);
-        if (currentRoom.players.length === 3) {
+        if (currentRoom.players.length === (currentRoom.maxPlayers || 3)) {
             currentRoom.gameStarted = true;
         }
 
@@ -250,7 +255,9 @@ export default function Home() {
                 setGameOver({ winner: 'draw' });
             } else {
                 // Next turn
-                updatedRoom.currentTurn = (room.currentTurn % 3) + 1;
+            } else {
+                // Next turn
+                updatedRoom.currentTurn = (room.currentTurn % (room.maxPlayers || 3)) + 1;
             }
         }
 
@@ -263,6 +270,8 @@ export default function Home() {
             pusher.unsubscribe(`room-${roomCode}`);
         }
         setGameState('home');
+        setNumPlayers(2);
+        setWinCondition(4);
         setPlayerName('');
         setRoomCode('');
         setRoom(null);
@@ -317,7 +326,55 @@ export default function Home() {
 
             {error && <div className="error-message">{error}</div>}
 
-            <button className="btn-primary" onClick={handleCreateRoom}>
+            <div className="input-group">
+                <label>Number of Players</label>
+                <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem' }}>
+                    {[2, 3, 4].map(num => (
+                        <button
+                            key={num}
+                            className={`btn-select ${numPlayers === num ? 'selected' : ''}`}
+                            onClick={() => setNumPlayers(num)}
+                            style={{
+                                flex: 1,
+                                padding: '0.5rem',
+                                background: numPlayers === num ? '#667eea' : '#e2e8f0',
+                                color: numPlayers === num ? 'white' : '#4a5568',
+                                border: 'none',
+                                borderRadius: '0.25rem',
+                                cursor: 'pointer'
+                            }}
+                        >
+                            {num} Players
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            <div className="input-group">
+                <label>Win Condition</label>
+                <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem' }}>
+                    {[3, 4].map(num => (
+                        <button
+                            key={num}
+                            className={`btn-select ${winCondition === num ? 'selected' : ''}`}
+                            onClick={() => setWinCondition(num)}
+                            style={{
+                                flex: 1,
+                                padding: '0.5rem',
+                                background: winCondition === num ? '#667eea' : '#e2e8f0',
+                                color: winCondition === num ? 'white' : '#4a5568',
+                                border: 'none',
+                                borderRadius: '0.25rem',
+                                cursor: 'pointer'
+                            }}
+                        >
+                            Connect {num}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            <button className="btn-primary" onClick={handleCreateRoom} style={{ marginTop: '1rem' }}>
                 Create Room
             </button>
             <button className="btn-back" onClick={() => setGameState('home')}>
@@ -394,7 +451,7 @@ export default function Home() {
 
             {room && room.players.length < 3 && (
                 <div className="waiting-message">
-                    Waiting for {3 - room.players.length} more player(s)...
+                    Waiting for {(room.maxPlayers || 3) - room.players.length} more player(s)...
                 </div>
             )}
 
