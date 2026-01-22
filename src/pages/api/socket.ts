@@ -51,7 +51,7 @@ export default function SocketHandler(req: NextApiRequest, res: NextApiResponseS
 
     console.log('Starting Socket.io server...');
 
-    const io = new Server(res.socket.server, {
+    const io = new Server(res.socket.server as any, {
         path: '/api/socket',
         addTrailingSlash: false,
         cors: {
