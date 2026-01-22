@@ -28,7 +28,8 @@ body {
     border-radius: 20px;
     padding: 2rem;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-    min-width: 400px;
+    width: 100%;
+    max-width: 600px;
 }
 
 .home-screen {
@@ -318,15 +319,26 @@ button {
     font-size: 1.1rem;
 }
 
+.game-container {
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 20px;
+    padding: 2rem;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    width: 100%;
+    max-width: 500px;
+    margin: 0 auto;
+}
+
+/* ... existing styles ... */
+
 @media (max-width: 768px) {
-    .game-container {
+    .container {
         padding: 1rem;
-        min-width: unset;
     }
 
-    .board-cell {
-        width: 45px;
-        height: 45px;
+    .game-container {
+        padding: 1.5rem;
+        border-radius: 15px;
     }
 
     .home-screen h1 {
@@ -335,5 +347,38 @@ button {
 
     .button-group {
         flex-direction: column;
+    }
+}
+
+@media (max-width: 480px) {
+    .container {
+        padding: 0.5rem;
+    }
+
+    .game-container {
+        padding: 1rem;
+    }
+
+    .board-cell {
+        width: 35px;
+        height: 35px;
+        border-width: 2px;
+    }
+
+    .game-board {
+        padding: 0.75rem;
+    }
+
+    .board-grid {
+        gap: 5px;
+    }
+
+    .board-column {
+        gap: 5px;
+    }
+
+    .room-code-display .code {
+        font-size: 2rem;
+        letter-spacing: 0.2rem;
     }
 }
