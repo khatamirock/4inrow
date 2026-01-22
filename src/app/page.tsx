@@ -1,13 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { io, Socket } from 'socket.io-client';
+import Pusher from 'pusher-js';
 import { Room } from '@/types/game';
 
 type GameState = 'home' | 'create' | 'join' | 'waiting' | 'playing';
 
 export default function Home() {
-    const [socket, setSocket] = useState<Socket | null>(null);
+    const [pusher, setPusher] = useState<Pusher | null>(null);
     const [gameState, setGameState] = useState<GameState>('home');
     const [playerName, setPlayerName] = useState('');
     const [roomCode, setRoomCode] = useState('');
@@ -17,49 +17,58 @@ export default function Home() {
     const [gameOver, setGameOver] = useState<{ winner: number | 'draw', winnerName?: string } | null>(null);
 
     useEffect(() => {
-        // Initialize socket connection
-        const socketInitializer = async () => {
-            // Call the API route to initialize Socket.io
-            await fetch('/api/socket');
-
-            const newSocket = io({
-                path: '/api/socket',
-            });
-
-            newSocket.on('connect', () => {
-                console.log('Connected to server');
-            });
-
-            newSocket.on('connect_error', (error) => {
-                console.error('Connection error:', error);
-            });
-
-            setSocket(newSocket);
-
-            newSocket.on('roomUpdate', (updatedRoom: Room) => {
-                setRoom(updatedRoom);
-                if (updatedRoom.gameStarted && gameState === 'waiting') {
-                    setGameState('playing');
-                }
-            });
-
-            newSocket.on('gameOver', (data: { winner: number | 'draw', winnerName?: string }) => {
-                setGameOver(data);
-            });
-
-            newSocket.on('playerLeft', () => {
-                setError('A player has left the game');
-            });
-        };
-
-        socketInitializer();
+        const pusherClient = new Pusher(process.env.NEXT_PUBLIC_PUSHER_KEY!, {
+            cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER!,
+        });
+        setPusher(pusherClient);
 
         return () => {
-            if (socket) {
-                socket.close();
-            }
+            pusherClient.disconnect();
         };
     }, []);
+
+    const triggerEvent = async (channel: string, event: string, data: any) => {
+        await fetch('/api/pusher', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ channel, event, data })
+        });
+    };
+
+    const generateRoomCode = () => {
+        return Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    };
+
+    const checkWin = (board: (number | null)[][], row: number, col: number, player: number) => {
+        const rows = 6;
+        const cols = 7;
+
+        // Check horizontal
+        let count = 1;
+        for (let c = col - 1; c >= 0 && board[row][c] === player; c--) count++;
+        for (let c = col + 1; c < cols && board[row][c] === player; c++) count++;
+        if (count >= 4) return true;
+
+        // Check vertical
+        count = 1;
+        for (let r = row - 1; r >= 0 && board[r][col] === player; r--) count++;
+        for (let r = row + 1; r < rows && board[r][col] === player; r++) count++;
+        if (count >= 4) return true;
+
+        // Check diagonal (top-left to bottom-right)
+        count = 1;
+        for (let r = row - 1, c = col - 1; r >= 0 && c >= 0 && board[r][c] === player; r--, c--) count++;
+        for (let r = row + 1, c = col + 1; r < rows && c < cols && board[r][c] === player; r++, c++) count++;
+        if (count >= 4) return true;
+
+        // Check diagonal (top-right to bottom-left)
+        count = 1;
+        for (let r = row - 1, c = col + 1; r >= 0 && c < cols && board[r][c] === player; r--, c++) count++;
+        for (let r = row + 1, c = col - 1; r < rows && c >= 0 && board[r][c] === player; r++, c--) count++;
+        if (count >= 4) return true;
+
+        return false;
+    };
 
     const handleCreateRoom = () => {
         if (!playerName.trim()) {
@@ -67,19 +76,59 @@ export default function Home() {
             return;
         }
 
-        if (socket) {
-            socket.emit('createRoom', playerName, (response: { success: boolean, roomCode?: string }) => {
-                if (response.success && response.roomCode) {
-                    setRoomCode(response.roomCode);
-                    setMyPlayerNumber(1);
-                    setGameState('waiting');
-                    setError('');
+        const code = generateRoomCode();
+        const newRoom: Room = {
+            code,
+            players: [{
+                id: 'p1',
+                name: playerName,
+                playerNumber: 1
+            }],
+            board: Array(6).fill(null).map(() => Array(7).fill(null)),
+            currentTurn: 1,
+            gameStarted: false,
+            winner: null
+        };
+
+        setRoomCode(code);
+        setMyPlayerNumber(1);
+        setRoom(newRoom);
+        setGameState('waiting');
+        setError('');
+
+        // Subscribe to room channel
+        if (pusher) {
+            const channel = pusher.subscribe(`room-${code}`);
+
+            channel.bind('player-joined', (data: { player: any, room: Room }) => {
+                setRoom(data.room);
+                if (data.room.gameStarted) {
+                    setGameState('playing');
                 }
             });
+
+            channel.bind('game-update', (data: { room: Room }) => {
+                setRoom(data.room);
+            });
+
+            channel.bind('game-over', (data: { winner: number | 'draw', winnerName?: string }) => {
+                setGameOver(data);
+            });
+
+            channel.bind('player-left', () => {
+                setError('A player has left the game');
+            });
         }
+
+        // Store room on server for others to join
+        fetch(`/api/room/${code}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(newRoom)
+        });
     };
 
-    const handleJoinRoom = () => {
+    const handleJoinRoom = async () => {
         if (!playerName.trim()) {
             setError('Please enter your name');
             return;
@@ -90,27 +139,122 @@ export default function Home() {
             return;
         }
 
-        if (socket) {
-            socket.emit('joinRoom', roomCode, playerName, (response: { success: boolean, error?: string, playerNumber?: number }) => {
-                if (response.success && response.playerNumber) {
-                    setMyPlayerNumber(response.playerNumber);
-                    setGameState('waiting');
-                    setError('');
-                } else {
-                    setError(response.error || 'Failed to join room');
-                }
-            });
+        if (!pusher) return;
+
+        // Subscribe to room channel
+        const channel = pusher.subscribe(`room-${roomCode}`);
+
+        // Request current room state
+        const response = await fetch(`/api/room/${roomCode}`);
+
+        if (!response.ok) {
+            setError('Room not found');
+            return;
         }
+
+        const currentRoom: Room = await response.json();
+
+        if (currentRoom.players.length >= 3) {
+            setError('Room is full');
+            return;
+        }
+
+        if (currentRoom.gameStarted) {
+            setError('Game already started');
+            return;
+        }
+
+        const playerNumber = currentRoom.players.length + 1;
+        const newPlayer = {
+            id: `p${playerNumber}`,
+            name: playerName,
+            playerNumber
+        };
+
+        currentRoom.players.push(newPlayer);
+        if (currentRoom.players.length === 3) {
+            currentRoom.gameStarted = true;
+        }
+
+        setMyPlayerNumber(playerNumber);
+        setRoom(currentRoom);
+        setGameState(currentRoom.gameStarted ? 'playing' : 'waiting');
+        setError('');
+
+        // Broadcast player joined
+        await triggerEvent(`room-${roomCode}`, 'player-joined', { player: newPlayer, room: currentRoom });
+
+        // Listen to game events
+        channel.bind('player-joined', (data: { player: any, room: Room }) => {
+            setRoom(data.room);
+            if (data.room.gameStarted) {
+                setGameState('playing');
+            }
+        });
+
+        channel.bind('game-update', (data: { room: Room }) => {
+            setRoom(data.room);
+        });
+
+        channel.bind('game-over', (data: { winner: number | 'draw', winnerName?: string }) => {
+            setGameOver(data);
+        });
+
+        channel.bind('player-left', () => {
+            setError('A player has left the game');
+        });
     };
 
-    const handleMove = (col: number) => {
-        if (!socket || !room || !room.gameStarted || gameOver) return;
+    const handleMove = async (col: number) => {
+        if (!room || !room.gameStarted || gameOver) return;
         if (myPlayerNumber !== room.currentTurn) return;
 
-        socket.emit('makeMove', roomCode, col);
+        // Find the lowest empty row in the column
+        let row = -1;
+        for (let r = 5; r >= 0; r--) {
+            if (room.board[r][col] === null) {
+                row = r;
+                break;
+            }
+        }
+
+        if (row === -1) return; // Column is full
+
+        const newBoard = room.board.map(r => [...r]);
+        newBoard[row][col] = myPlayerNumber;
+
+        const updatedRoom = { ...room, board: newBoard };
+
+        // Check for win
+        if (checkWin(newBoard, row, col, myPlayerNumber!)) {
+            updatedRoom.winner = myPlayerNumber!;
+            const player = room.players.find(p => p.playerNumber === myPlayerNumber);
+            await triggerEvent(`room-${roomCode}`, 'game-over', {
+                winner: myPlayerNumber,
+                winnerName: player?.name
+            });
+            setGameOver({ winner: myPlayerNumber!, winnerName: player?.name });
+        } else {
+            // Check for draw
+            const isFull = newBoard[0].every(cell => cell !== null);
+            if (isFull) {
+                updatedRoom.winner = 'draw';
+                await triggerEvent(`room-${roomCode}`, 'game-over', { winner: 'draw' });
+                setGameOver({ winner: 'draw' });
+            } else {
+                // Next turn
+                updatedRoom.currentTurn = (room.currentTurn % 3) + 1;
+            }
+        }
+
+        setRoom(updatedRoom);
+        await triggerEvent(`room-${roomCode}`, 'game-update', { room: updatedRoom });
     };
 
     const resetGame = () => {
+        if (pusher && roomCode) {
+            pusher.unsubscribe(`room-${roomCode}`);
+        }
         setGameState('home');
         setPlayerName('');
         setRoomCode('');
