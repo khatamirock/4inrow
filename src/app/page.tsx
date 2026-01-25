@@ -123,6 +123,11 @@ export default function Home() {
             channel.bind('player-left', () => {
                 setError('A player has left the game');
             });
+
+            channel.bind('game-reset', (data: { room: Room }) => {
+                setRoom(data.room);
+                setGameOver(null);
+            });
         }
 
         // Store room on server for others to join
@@ -215,6 +220,37 @@ export default function Home() {
         channel.bind('player-left', () => {
             setError('A player has left the game');
         });
+
+        channel.bind('game-reset', (data: { room: Room }) => {
+            setRoom(data.room);
+            setGameOver(null);
+        });
+    };
+
+    const handlePlayAgain = async () => {
+        if (!room) return;
+
+        const updatedRoom: Room = {
+            ...room,
+            board: Array(6).fill(null).map(() => Array(7).fill(null)),
+            winner: null,
+            // Optionally rotate starting player or keep winner's turn
+            // For now, let's keep it simple and reset to player 1 or alternate
+            currentTurn: (room.currentTurn % (room.maxPlayers || 3)) + 1 // Rotate start turn
+        };
+
+        setRoom(updatedRoom);
+        setGameOver(null);
+
+        // Update server
+        await fetch(`/api/room/${roomCode}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updatedRoom)
+        });
+
+        // Notify other players
+        await triggerEvent(`room-${roomCode}`, 'game-reset', { room: updatedRoom });
     };
 
     const handleMove = async (col: number) => {
@@ -505,7 +541,10 @@ export default function Home() {
                                 ? "It's a Draw!"
                                 : `${gameOver.winnerName} Wins!`}
                         </h2>
-                        <button className="btn-primary" onClick={resetGame}>
+                        <button className="btn-primary" onClick={handlePlayAgain} style={{ marginRight: '1rem' }}>
+                            Play Again
+                        </button>
+                        <button className="btn-secondary" onClick={resetGame}>
                             Back to Home
                         </button>
                     </div>
