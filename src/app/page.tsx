@@ -17,12 +17,6 @@ export default function Home() {
     const [gameOver, setGameOver] = useState<{ winner: number | 'draw', winnerName?: string } | null>(null);
     const [numPlayers, setNumPlayers] = useState<number>(2);
     const [winCondition, setWinCondition] = useState<number>(4);
-    const [gravity, setGravity] = useState<boolean>(true);
-    const [gridCols, setGridCols] = useState<number>(7);
-    const [gridRows, setGridRows] = useState<number>(6);
-    const [timeLimit, setTimeLimit] = useState<number>(0);
-    const [powerMovesEnabled, setPowerMovesEnabled] = useState<boolean>(false);
-    const [activePowerMove, setActivePowerMove] = useState<'remove' | 'swap' | null>(null);
 
     useEffect(() => {
         const pusherClient = new Pusher(process.env.NEXT_PUBLIC_PUSHER_KEY!, {
@@ -48,8 +42,8 @@ export default function Home() {
     };
 
     const checkWin = (board: (number | null)[][], row: number, col: number, player: number) => {
-        const rows = board.length;
-        const cols = board[0].length;
+        const rows = 6;
+        const cols = 7;
         const winNeeded = room?.winCondition || 4;
 
         // Check horizontal
@@ -93,20 +87,12 @@ export default function Home() {
                 name: playerName,
                 playerNumber: 1
             }],
-            board: Array(gridRows).fill(null).map(() => Array(gridCols).fill(null)),
+            board: Array(6).fill(null).map(() => Array(7).fill(null)),
             currentTurn: 1,
             gameStarted: false,
             winner: null,
             maxPlayers: numPlayers,
-            winCondition: winCondition,
-            gravity,
-            gridSize: { rows: gridRows, cols: gridCols },
-            timeLimit,
-            powerMoves: {
-                remove: powerMovesEnabled ? 1 : 0,
-                swap: powerMovesEnabled ? 1 : 0
-            },
-            turnDeadline: timeLimit > 0 ? Date.now() + timeLimit * 1000 : undefined
+            winCondition: winCondition
         };
 
         setRoomCode(code);
@@ -267,28 +253,20 @@ export default function Home() {
         await triggerEvent(`room-${roomCode}`, 'game-reset', { room: updatedRoom });
     };
 
-    const handleMove = async (col: number, explicitRow?: number) => {
+    const handleMove = async (col: number) => {
         if (!room || !room.gameStarted || gameOver) return;
         if (myPlayerNumber !== room.currentTurn) return;
 
+        // Find the lowest empty row in the column
         let row = -1;
-
-        if (room.gravity) {
-            // Find the lowest empty row in the column
-            for (let r = room.board.length - 1; r >= 0; r--) {
-                if (room.board[r][col] === null) {
-                    row = r;
-                    break;
-                }
-            }
-        } else {
-            // Gravity Off: Use the clicked cell
-            if (explicitRow !== undefined && room.board[explicitRow][col] === null) {
-                row = explicitRow;
+        for (let r = 5; r >= 0; r--) {
+            if (room.board[r][col] === null) {
+                row = r;
+                break;
             }
         }
 
-        if (row === -1) return; // Invalid move
+        if (row === -1) return; // Column is full
 
         const newBoard = room.board.map(r => [...r]);
         newBoard[row][col] = myPlayerNumber;
@@ -312,108 +290,14 @@ export default function Home() {
                 await triggerEvent(`room-${roomCode}`, 'game-over', { winner: 'draw' });
                 setGameOver({ winner: 'draw' });
             } else {
+                // Next turn
                 updatedRoom.currentTurn = (room.currentTurn % (room.maxPlayers || 3)) + 1;
             }
         }
 
-        if (updatedRoom.timeLimit > 0 && !updatedRoom.winner) {
-            updatedRoom.turnDeadline = Date.now() + updatedRoom.timeLimit * 1000;
-        }
-
         setRoom(updatedRoom);
         await triggerEvent(`room-${roomCode}`, 'game-update', { room: updatedRoom });
     };
-
-    const handlePowerMoveAction = async (col: number, row: number) => {
-        if (!room || !room.gameStarted || gameOver || !activePowerMove) return;
-
-        const newBoard = room.board.map(r => [...r]);
-        const newPowerMoves = { ...room.powerMoves };
-        let moveSuccessful = false;
-
-        if (activePowerMove === 'remove') {
-            if (newPowerMoves.remove <= 0) return;
-            if (newBoard[row][col] === null) return; // Must target a piece
-
-            // Remove piece
-            newBoard[row][col] = null;
-
-            // Apply gravity if enabled
-            if (room.gravity) {
-                // Shift pieces down in this column
-                for (let r = row; r > 0; r--) {
-                    newBoard[r][col] = newBoard[r - 1][col];
-                }
-                newBoard[0][col] = null; // Top becomes empty
-            }
-
-            newPowerMoves.remove--;
-            moveSuccessful = true;
-        } else if (activePowerMove === 'swap') {
-            if (newPowerMoves.swap <= 0) return;
-
-            const col1 = col;
-            const col2 = (col + 1) % room.gridSize.cols; // Wrap around
-
-            // Swap columns
-            for (let r = 0; r < room.gridSize.rows; r++) {
-                const temp = newBoard[r][col1];
-                newBoard[r][col1] = newBoard[r][col2];
-                newBoard[r][col2] = temp;
-            }
-
-            newPowerMoves.swap--;
-            moveSuccessful = true;
-        }
-
-        if (moveSuccessful) {
-            const updatedRoom = {
-                ...room,
-                board: newBoard,
-                powerMoves: newPowerMoves,
-                currentTurn: (room.currentTurn % (room.maxPlayers || 3)) + 1
-            };
-
-            if (updatedRoom.timeLimit > 0) {
-                updatedRoom.turnDeadline = Date.now() + updatedRoom.timeLimit * 1000;
-            }
-
-            setRoom(updatedRoom);
-            setActivePowerMove(null);
-            await triggerEvent(`room-${roomCode}`, 'game-update', { room: updatedRoom });
-
-            // Check win condition after power move? 
-            // Typically power moves might cause a win (e.g. Gravity shift makes 4 connect).
-            // Let's do a quick check for the current player? Or maybe the previous player?
-            // Actually, if I remove a piece, I might win or opponent might win.
-            // For simplicity, let's NOT check win immediately, or check for BOTH.
-            // But usually you assume the move ends turn.
-        }
-    };
-
-    const handlePassTurn = async () => {
-        if (!room) return;
-        const updatedRoom = { ...room };
-        updatedRoom.currentTurn = (room.currentTurn % (room.maxPlayers || 3)) + 1;
-        if (updatedRoom.timeLimit > 0) {
-            updatedRoom.turnDeadline = Date.now() + updatedRoom.timeLimit * 1000;
-        }
-        setRoom(updatedRoom);
-        await triggerEvent(`room-${roomCode}`, 'game-update', { room: updatedRoom });
-    };
-
-    useEffect(() => {
-        if (!room?.gameStarted || !room.timeLimit || gameOver) return;
-
-        const interval = setInterval(() => {
-            const now = Date.now();
-            const deadline = room.turnDeadline || 0;
-            if (now > deadline && myPlayerNumber === room.currentTurn) {
-                handlePassTurn();
-            }
-        }, 1000);
-        return () => clearInterval(interval);
-    }, [room, gameOver, myPlayerNumber]);
 
     const resetGame = () => {
         if (pusher && roomCode) {
@@ -503,7 +387,7 @@ export default function Home() {
             <div className="input-group">
                 <label>Win Condition</label>
                 <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem' }}>
-                    {[3, 4, 5].map(num => (
+                    {[3, 4].map(num => (
                         <button
                             key={num}
                             className={`btn-select ${winCondition === num ? 'selected' : ''}`}
@@ -519,62 +403,6 @@ export default function Home() {
                             }}
                         >
                             Connect {num}
-                        </button>
-                    ))}
-                </div>
-            </div>
-
-            <div className="input-group">
-                <label>Grid Size</label>
-                <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem' }}>
-                    <button
-                        className={`btn-select ${gridCols === 7 && gridRows === 6 ? 'selected' : ''}`}
-                        onClick={() => { setGridCols(7); setGridRows(6); }}
-                        style={{ flex: 1, padding: '0.5rem', background: gridCols === 7 ? '#667eea' : '#e2e8f0', color: gridCols === 7 ? 'white' : '#4a5568', borderRadius: '0.25rem' }}
-                    >
-                        Standard (7x6)
-                    </button>
-                    <button
-                        className={`btn-select ${gridCols === 10 && gridRows === 10 ? 'selected' : ''}`}
-                        onClick={() => { setGridCols(10); setGridRows(10); }}
-                        style={{ flex: 1, padding: '0.5rem', background: gridCols === 10 ? '#667eea' : '#e2e8f0', color: gridCols === 10 ? 'white' : '#4a5568', borderRadius: '0.25rem' }}
-                    >
-                        Large (10x10)
-                    </button>
-                </div>
-            </div>
-
-            <div className="input-group">
-                <label>Game Modifiers</label>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <input type="checkbox" checked={gravity} onChange={(e) => setGravity(e.target.checked)} />
-                        Gravity On
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <input type="checkbox" checked={powerMovesEnabled} onChange={(e) => setPowerMovesEnabled(e.target.checked)} />
-                        Enable Power Moves
-                    </label>
-                </div>
-            </div>
-
-            <div className="input-group">
-                <label>Turn Timer</label>
-                <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem' }}>
-                    {[0, 15, 30].map(seconds => (
-                        <button
-                            key={seconds}
-                            className={`btn-select ${timeLimit === seconds ? 'selected' : ''}`}
-                            onClick={() => setTimeLimit(seconds)}
-                            style={{
-                                flex: 1,
-                                padding: '0.5rem',
-                                background: timeLimit === seconds ? '#667eea' : '#e2e8f0',
-                                color: timeLimit === seconds ? 'white' : '#4a5568',
-                                borderRadius: '0.25rem'
-                            }}
-                        >
-                            {seconds === 0 ? 'Off' : `${seconds}s`}
                         </button>
                     ))}
                 </div>
@@ -702,41 +530,7 @@ export default function Home() {
 
                 {!gameOver && (
                     <div className="game-status">
-                        <div style={{ fontSize: '1.2em', marginBottom: '0.5rem' }}>
-                            {isMyTurn ? "Your turn!" : `${currentPlayer?.name}'s turn`}
-                        </div>
-                        {room.timeLimit > 0 && room.turnDeadline && (
-                            <div className="timer" style={{ color: '#e53e3e', fontWeight: 'bold' }}>
-                                Time left: {Math.max(0, Math.ceil((room.turnDeadline - Date.now()) / 1000))}s
-                            </div>
-                        )}
-                        {isMyTurn && room.powerMoves && (
-                            <div className="power-moves" style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
-                                {room.powerMoves.remove > 0 && (
-                                    <button
-                                        className={`btn-secondary ${activePowerMove === 'remove' ? 'active' : ''}`}
-                                        onClick={() => setActivePowerMove(activePowerMove === 'remove' ? null : 'remove')}
-                                        style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem', background: activePowerMove === 'remove' ? '#ed8936' : undefined }}
-                                    >
-                                        💣 Remove ({room.powerMoves.remove})
-                                    </button>
-                                )}
-                                {room.powerMoves.swap > 0 && (
-                                    <button
-                                        className={`btn-secondary ${activePowerMove === 'swap' ? 'active' : ''}`}
-                                        onClick={() => setActivePowerMove(activePowerMove === 'swap' ? null : 'swap')}
-                                        style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem', background: activePowerMove === 'swap' ? '#48bb78' : undefined }}
-                                    >
-                                        ↔️ Swap Col ({room.powerMoves.swap})
-                                    </button>
-                                )}
-                            </div>
-                        )}
-                        {activePowerMove && (
-                            <div style={{ color: '#ed8936', fontSize: '0.9rem', marginTop: '0.25rem' }}>
-                                {activePowerMove === 'remove' ? 'Select a piece to remove' : 'Select a column to swap'}
-                            </div>
-                        )}
+                        {isMyTurn ? "Your turn!" : `${currentPlayer?.name}'s turn`}
                     </div>
                 )}
 
@@ -767,15 +561,7 @@ export default function Home() {
                                             <div
                                                 key={`${row}-${col}`}
                                                 className={`board-cell ${cellValue !== null ? 'filled' : ''}`}
-                                                onClick={() => {
-                                                    if (!gameOver && isMyTurn) {
-                                                        if (activePowerMove) {
-                                                            handlePowerMoveAction(col, row);
-                                                        } else {
-                                                            handleMove(col, row);
-                                                        }
-                                                    }
-                                                }}
+                                                onClick={() => !gameOver && isMyTurn && handleMove(col)}
                                             >
                                                 {cellValue !== null && (
                                                     <div className={`piece p${cellValue}`}></div>
